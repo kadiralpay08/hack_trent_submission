@@ -5,7 +5,9 @@
   python punch_capture.py --button                     hold the glove button around each punch instead
   python punch_capture.py --simulate                   fake glove (no hardware), to try the tool
 
-PROMPTED MODE (default). The screen shows "JAB!", "HOOK!" or "UPPERCUT!" with a beep, in random order.
+PROMPTED MODE (default). Nothing starts until you have calibrated (press C, get into guard during the
+5 s countdown) and pressed "." (works from any window). "." also pauses and resumes at any time.
+The screen shows "JAB!", "HOOK!" or "UPPERCUT!" with a beep, in random order.
 Throw that punch once, then return to guard. The strongest punch in the next 1.6 s gets that label.
 Anything the punch finder catches while you are NOT being prompted is saved as NONE, a "not a punch"
 example. Every 15 prompts there is a "MOVE, DON'T PUNCH" round: shuffle, adjust your guard, feint,
@@ -14,8 +16,11 @@ Your hands stay as they will be in play, so the training punches match the game.
 
 BUTTON MODE (--button). Hold the glove button, throw one punch, release. Collects no NONE examples.
 
+Keys that work in any window, no Enter needed:
+  .       prompted mode: start, then pause or resume at any time
+  F11     full screen on or off (it starts full screen; --windowed starts in a window)
 Type in THIS TERMINAL, then Enter:
-  p       pause or resume (prompted mode)
+  p       pause or resume (prompted mode), the same as "."
   x       undo the last saved punch (moves it to punch_data/_rejected/)
   j/h/u   button mode only: switch to JAB / HOOK / UPPERCUT
   q       quit (everything saved so far is kept); q in the camera window also works
@@ -66,6 +71,10 @@ class Capture:
         self.session = time.strftime("%Y%m%d_%H%M%S")
         self.result, self.result_colour, self.result_t = "", GREY, 0.0
         self.quit = False
+        self.calibrated = False  # set by pose_tracker after C and its 5 s countdown
+
+    def on_calibrated(self):
+        self.calibrated = True
 
     def remaining(self):
         return {k: max(0, self.target - self.counts.get(k, 0)) for k in ps.LABELS}
@@ -77,7 +86,7 @@ class Capture:
     def read_terminal(self):
         while not self.quit:
             try:
-                self.command(input().strip().lstrip("ï»¿").lower())
+                self.command(input().strip().lstrip("﻿").lower())  # ﻿: a byte-order mark
             except EOFError:
                 return
 
@@ -147,7 +156,9 @@ class ButtonCapture(Capture):
         else:
             super().command(word)
 
-    def on_frame(self):
+    def on_frame(self, keys=None):
+        if keys is not None:
+            keys.poll_fullscreen()
         while not self.sensors.events.empty():
             kind, value = self.sensors.events.get()
             if kind == "press":
@@ -185,16 +196,17 @@ class ButtonCapture(Capture):
         else:
             ps.put(frame, "ALL DONE - train with python punch_train.py", top, GREEN, 0.8)
         draw_common(self, frame, top + 58, self.press_t is not None)
-        ps.put(frame, "terminal: j/h/u switch punch, x undo, q quit", h - 15, GREY, 0.45)
+        ps.put(frame, "terminal: j/h/u switch punch, x undo, q quit  |  F11 full screen", h - ps.TEXT_BOTTOM, GREY, 0.45)
 
 
 class PromptedCapture(Capture):
     MODE = "prompted"
-    HELP = "type p to pause, x to undo, q to quit"
+    HELP = "calibrate with C, then press . to start (. pauses and resumes); terminal: x undo, q quit"
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.phase, self.phase_end, self.prompt = "announce", time.time() + ANNOUNCE_S, None
+        # "waiting" until calibrated and "." is pressed; then announce -> rest -> go ... -> done
+        self.phase, self.phase_end, self.prompt = "waiting", None, None
         self.prompts_done, self.paused = 0, False
         self.windows = []        # (label, start, end) of every punch prompt, to tell punches from NONE
         self.pending = []        # (label, start, end) prompts waiting for their data
@@ -202,13 +214,49 @@ class PromptedCapture(Capture):
         self.none_pending = []   # Segments to save as NONE once their data has arrived
 
     def command(self, word):
+        word = word.strip(".")  # "." works in every window, so it may also be typed into the terminal
         if word == "p":
-            self.paused = not self.paused
-            if not self.paused:
-                self.phase, self.phase_end = "announce", time.time() + ANNOUNCE_S
-            self.say("PAUSED (type p to carry on)" if self.paused else "carrying on", ORANGE)
+            self.toggle()
         else:
             super().command(word)
+
+    def not_ready_reason(self):
+        if not self.sensors.glove_ok():
+            return "no glove data"
+        if not self.sensors.segmenter.ready:
+            return "hold the glove still for a moment"
+        if not self.calibrated:
+            return "press C to calibrate (get into guard during the countdown)"
+        return None
+
+    def toggle(self):
+        """The "." key: start, pause or resume."""
+        now = time.time()
+        if self.phase == "done":
+            return
+        if self.phase == "waiting" or self.paused:
+            reason = self.not_ready_reason()
+            if reason:
+                self.say(f"cannot start yet: {reason}", ORANGE)
+                return
+            self.paused = False
+            self.phase, self.phase_end = "announce", now + ANNOUNCE_S
+            self.say("starting" if not self.prompts_done else "carrying on", GREEN)
+            return
+        # pause: a prompt that is showing right now is cancelled, so it does not count as missed
+        if self.phase == "go" and self.pending and self.pending[-1][1] >= now - GO_S:
+            self.pending.pop()
+            self.windows.pop()
+            self.prompts_done -= 1
+        if self.phase == "free":
+            self.free.append((self.free_start, now))
+        self.paused = True
+        self.say("PAUSED - press . to carry on", ORANGE)
+
+    def on_calibrated(self):
+        self.calibrated = True
+        if self.phase == "waiting":
+            self.say("calibrated. Press . to start", GREEN)
 
     def next_prompt(self):
         left = self.remaining()
@@ -241,13 +289,19 @@ class PromptedCapture(Capture):
     def in_prompt_window(self, t):
         return any(start - 0.2 <= t <= end + LATE_S for _, start, end in self.windows)
 
-    def on_frame(self):
+    def on_frame(self, keys=None):
         now = time.time()
+        if keys is not None:
+            if keys.period():
+                self.toggle()
+            keys.poll_fullscreen()
+        # NONE examples only while a session is running: not while waiting, paused or finished
+        recording = self.phase in ("announce", "rest", "go", "free") and not self.paused
         while not self.sensors.events.empty():
             kind, value = self.sensors.events.get()
-            if kind == "end" and value.reason != "gap" and not self.in_prompt_window(value.start_t):
+            if kind == "end" and value.reason != "gap" and recording and not self.in_prompt_window(value.start_t):
                 self.none_pending.append(value)
-        if not self.paused and self.phase != "done" and now >= self.phase_end:
+        if not self.paused and self.phase not in ("waiting", "done") and now >= self.phase_end:
             self.advance(now)
         latest = self.sensors.latest_imu_t() or 0.0
         wait = self.sensors.settings.timeout_s + POST_S
@@ -270,8 +324,12 @@ class PromptedCapture(Capture):
     def on_draw(self, frame):
         h, now = frame.shape[0], time.time()
         top = 150
-        if self.paused:
-            ps.put(frame, "PAUSED - type p in the terminal to carry on", top, ORANGE, 0.8, thick=2)
+        if self.phase == "waiting" or self.paused:
+            reason = self.not_ready_reason()
+            title = "PAUSED" if self.paused else "READY TO RECORD"
+            ps.put(frame, title, top, ORANGE if self.paused else YELLOW, 1.1, thick=3)
+            ps.put(frame, reason or "press . to " + ("carry on" if self.paused else "start"), top + 32,
+                   ORANGE if reason else (255, 255, 255), 0.7)
         elif self.phase == "announce":
             ps.put(frame, f"GET IN GUARD - starting in {max(0.0, self.phase_end - now):.0f}", top, YELLOW, 1.0, thick=3)
         elif self.phase == "rest":
@@ -286,7 +344,7 @@ class PromptedCapture(Capture):
         elif self.phase == "done":
             ps.put(frame, "ALL DONE - train with python punch_train.py", top, GREEN, 0.8)
         draw_common(self, frame, top + 70, False)
-        ps.put(frame, "terminal: p pause, x undo, q quit", h - 15, GREY, 0.45)
+        ps.put(frame, ". start/pause  |  F11 full screen  |  terminal: x undo, q quit", h - ps.TEXT_BOTTOM, GREY, 0.45)
 
 
 def draw_common(cap, frame, row, button_held):
@@ -298,7 +356,7 @@ def draw_common(cap, frame, row, button_held):
     elif button_held:
         ps.put(frame, "BUTTON HELD - recording", row + 30, RED, 0.8, thick=3)
     if time.time() - cap.result_t < 3:
-        ps.put(frame, cap.result[:75], h - 45, cap.result_colour, 0.55)
+        ps.put(frame, cap.result[:75], h - ps.TEXT_BOTTOM - 25, cap.result_colour, 0.55)
 
 
 def main():
@@ -308,6 +366,7 @@ def main():
     parser.add_argument("--button", action="store_true", help="hold the glove button around each punch")
     parser.add_argument("--data", default=ps.DATA_DIR, help="where to save blocks")
     parser.add_argument("--simulate", action="store_true", help="fake glove (no hardware)")
+    parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
@@ -318,17 +377,18 @@ def main():
     cls = ButtonCapture if args.button else PromptedCapture
     cap = cls(sensors, config, args.target, args.data, args.person)
     print("Recording to", os.path.abspath(args.data), "| already have:", cap.counts)
-    print(cap.HELP + " (type in this terminal, then Enter)")
+    print(cap.HELP)
     threading.Thread(target=cap.read_terminal, daemon=True).start()
+    keys = ps.ToolKeys(fullscreen=not args.windowed)
     started = time.time()
 
     def on_frame():
-        return cap.on_frame() or bool(args.max_seconds and time.time() - started > args.max_seconds)
+        return cap.on_frame(keys) or bool(args.max_seconds and time.time() - started > args.max_seconds)
 
     import pose_tracker
     try:
-        pose_tracker.main(on_frame=on_frame, on_draw=cap.on_draw, camera_index=args.camera,
-                          **sensors.pose_callbacks())
+        pose_tracker.main(on_frame=on_frame, on_draw=cap.on_draw, on_calibrated=cap.on_calibrated,
+                          camera_index=args.camera, fullscreen=not args.windowed, **sensors.pose_callbacks())
     finally:
         sensors.close()
     print("Saved this session:", len(cap.saved), "| totals:", cap.counts)

@@ -3,4 +3,4 @@ opencv-python
 numpy
 pyserial
 matplotlib
-scikit-learn
+scikit-learn==1.9.1  # the trained model in models/ only loads reliably on the version it was saved with

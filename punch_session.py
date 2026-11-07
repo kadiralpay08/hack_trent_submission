@@ -157,17 +157,25 @@ def pose_arrays(rows):
 
 # --- the trained model -------------------------------------------------------------------------------
 class Classifier:
-    """The random forest saved by punch_train.py, with the punch settings it was trained with."""
+    """The random forest saved by punch_train.py, with the punch settings it was trained with.
 
-    def __init__(self, path=MODEL_PATH):
+    min_confidence (how sure the model must be to press a key) is NOT fixed by training: it comes from
+    the argument, else from punch_config.json, so it can be changed without retraining.
+    """
+
+    def __init__(self, path=MODEL_PATH, min_confidence=None):
         import joblib
         bundle = joblib.load(path)
         self.model, self.features = bundle["model"], bundle["features"]
         self.model.n_jobs = 1  # one punch at a time: starting worker threads costs more than it saves
         self.labels = list(bundle["labels"])
-        self.segment = punch_segment.SegmentSettings.from_dict(bundle["segment"])
+        known = punch_segment.SegmentSettings().to_dict()
+        old = sorted(set(bundle["segment"]) - set(known))
+        if old:  # a model trained before a setting was removed (e.g. stop_ratio, 2026-11-07)
+            print(f"Note: this model has settings that no longer exist and are ignored: {', '.join(old)}. Retrain to update it.")
+        self.segment = punch_segment.SegmentSettings.from_dict({k: v for k, v in bundle["segment"].items() if k in known})
         self.camera_lag_s = bundle.get("camera_lag_s", 0.0)
-        self.min_confidence = bundle.get("min_confidence", 0.6)
+        self.min_confidence = load_config()["min_confidence"] if min_confidence is None else float(min_confidence)
         self.info = {k: bundle.get(k) for k in ("trained_at", "counts", "cv_accuracy", "feature_set")}
 
     @staticmethod
@@ -233,6 +241,32 @@ def count_blocks(root=DATA_DIR):
         label = os.path.basename(os.path.dirname(path))
         counts[label] = counts.get(label, 0) + 1
     return counts
+
+
+# --- keys and layout shared by the camera tools ------------------------------------------------------
+# pose_tracker draws its calibration messages in the bottom 70 pixels (pose_tracker.BOTTOM_RESERVED).
+# Tools keep their own bottom text at or above TEXT_BOTTOM pixels from the bottom, so nothing covers them.
+TEXT_BOTTOM = 80
+VK_PERIOD, VK_DECIMAL, VK_F11 = 0xBE, 0x6E, 0x7A
+
+
+class ToolKeys:
+    """Global keys that work from any window, without Enter: "." (start / pause) and F11 (full screen)."""
+
+    def __init__(self, fullscreen):
+        import controller
+        self.keys = controller.Hotkeys()
+        self.fullscreen = fullscreen
+
+    def period(self):
+        main, pad = self.keys.pressed(VK_PERIOD), self.keys.pressed(VK_DECIMAL)  # read both every frame
+        return main or pad
+
+    def poll_fullscreen(self):
+        if self.keys.pressed(VK_F11):
+            import pose_tracker
+            self.fullscreen = not self.fullscreen
+            pose_tracker.set_fullscreen(self.fullscreen)
 
 
 # --- drawing helpers shared by the camera windows ------------------------------------------------------
