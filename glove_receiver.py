@@ -1,6 +1,7 @@
 """Receive glove IMU frames over UDP.
 
 Frame (19 bytes): A5 5A | uint32 us (little-endian) | ax ay az gx gy gz int16 (big-endian) | XOR of bytes 2-17
+The second byte is 5B instead of 5A while the glove's training button is held (Sample.button).
 Run directly to print incoming data, or with --simulate to fake a glove for testing.
 """
 import argparse
@@ -14,7 +15,8 @@ from dataclasses import dataclass
 import numpy as np
 
 PORT = 5005
-SYNC = b"\xA5\x5A"
+SYNC = b"\xA5\x5A"          # button released (and all firmware without a button)
+SYNC_PRESSED = b"\xA5\x5B"  # training button held
 FRAME_LEN = 19
 
 # Must match the ranges the firmware sets on the MPU.
@@ -37,6 +39,7 @@ class Sample:
     gyro: np.ndarray     # deg/s, in glove axes
     t: float = 0.0       # when it was measured, on the laptop clock (time.time()); set by Clock
     dt: float = 0.0      # seconds since the previous sample, from t_us; a dropped packet shows as a big dt
+    button: bool = False  # the training button was held when this sample was taken
 
 
 def checksum(body):
@@ -50,22 +53,23 @@ def parse_frames(data):
     """Yield a Sample for every valid frame in data; junk or corrupt bytes are skipped."""
     i = 0
     while i + FRAME_LEN <= len(data):
-        if data[i:i + 2] == SYNC and checksum(data[i + 2:i + 18]) == data[i + 18]:
+        head = data[i:i + 2]
+        if head in (SYNC, SYNC_PRESSED) and checksum(data[i + 2:i + 18]) == data[i + 18]:
             (t_us,) = struct.unpack_from("<I", data, i + 2)
             raw = np.array(struct.unpack_from(">6h", data, i + 6), dtype=float)
             accel = raw[:3][AXIS_MAP] / ACCEL_LSB_PER_G * AXIS_SIGN
             gyro = raw[3:][AXIS_MAP] / GYRO_LSB_PER_DPS * AXIS_SIGN
-            yield Sample(t_us, accel, gyro)
+            yield Sample(t_us, accel, gyro, button=head == SYNC_PRESSED)
             i += FRAME_LEN
         else:
             i += 1  # resync
 
 
-def pack_frame(t_us, accel, gyro):
+def pack_frame(t_us, accel, gyro, button=False):
     """Build a frame from accel (g) and gyro (deg/s); used by the simulator and tests."""
     counts = np.concatenate([np.asarray(accel) * ACCEL_LSB_PER_G, np.asarray(gyro) * GYRO_LSB_PER_DPS])
     body = struct.pack("<I", t_us & 0xFFFFFFFF) + struct.pack(">6h", *np.clip(np.round(counts), -32768, 32767).astype(int))
-    return SYNC + body + bytes([checksum(body)])
+    return (SYNC_PRESSED if button else SYNC) + body + bytes([checksum(body)])
 
 
 class Clock:
@@ -97,12 +101,17 @@ class Clock:
 
 
 class GloveReceiver:
-    """Background UDP listener. samples[glove_id] holds the most recent readings."""
+    """Background UDP listener. samples[glove_id] holds the most recent readings.
 
-    def __init__(self, port=PORT, history=1000):
+    on_sample(glove, sample), if given, is called for every sample in arrival order, on the listener
+    thread. Use it when you must see every sample exactly once (the deque can drop old ones).
+    """
+
+    def __init__(self, port=PORT, history=1000, on_sample=None):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("0.0.0.0", port))
         self.samples, self.clocks, self.history = {}, {}, history
+        self.on_sample = on_sample
         threading.Thread(target=self._listen, daemon=True).start()
 
     def _listen(self):
@@ -114,6 +123,8 @@ class GloveReceiver:
             for sample in parse_frames(data):
                 clock.stamp(sample, arrival)
                 self.samples.setdefault(glove, deque(maxlen=self.history)).append(sample)
+                if self.on_sample:
+                    self.on_sample(glove, sample)
 
     def latest(self, glove):
         buf = self.samples.get(glove)
@@ -151,4 +162,5 @@ if __name__ == "__main__":
         for glove in list(receiver.samples):
             recent = receiver.recent(glove, 0.5)
             peak = max((np.linalg.norm(s.accel) for s in recent), default=0)
-            print(f"glove {glove}: {len(recent) * 2} Hz, peak accel {peak:.1f} g, gyro {receiver.latest(glove).gyro.round(0)}")
+            button = "HELD" if receiver.latest(glove).button else "up"
+            print(f"glove {glove}: {len(recent) * 2} Hz, peak accel {peak:.1f} g, gyro {receiver.latest(glove).gyro.round(0)}, button {button}")

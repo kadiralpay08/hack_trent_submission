@@ -1,0 +1,20 @@
+{
+  "_note": "Shared punch settings. punch_tune.py saves the segment settings here.",
+  "segment": {
+    "timeout_s": 0.4,
+    "start_g": 2.5,
+    "decel_g": 3.0,
+    "settle_g": 1.5,
+    "settle_s": 0.02,
+    "min_peak_speed": 1.5,
+    "min_s": 0.08,
+    "rearm_s": 0.4,
+    "pre_s": 0.25,
+    "still_g": 0.1,
+    "still_dps": 30.0,
+    "ready_s": 0.15,
+    "max_gap_s": 0.1
+  },
+  "min_confidence": 0.6,
+  "camera_lag_s": 0.0
+}

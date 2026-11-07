@@ -35,6 +35,7 @@ PUNCH_SPEED = 4.0       # wrist speed (shoulder-widths/s) that starts a punch
 MIN_TRAVEL = 0.4        # wrist travel (shoulder-widths) needed to call a punch type
 PUNCH_COOLDOWN = 0.25   # seconds
 LEAD = "L"              # lead hand throws the jab (orthodox = "L")
+CALIBRATE_DELAY_S = 5.0  # seconds from pressing C (or F7) to calibrating, to get into guard first
 
 
 def ensure_model():
@@ -147,16 +148,18 @@ def draw_3d(world, vis, yaw, size=480, scale=250):
 
 
 def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
-         on_features=None, on_draw=None, builtin_punches=True):
+         on_features=None, on_draw=None, builtin_punches=True, camera_index=0, on_pose=None):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
     on_states(states): called every frame with the body-state labels active right now (BLOCK, DUCK,
         SLIP LEFT, SLIP RIGHT, GUARD DOWN). It gets an empty list when nobody is in view.
     on_frame(): called every frame; return True to stop the tracker.
-    want_calibrate(): called every frame; return True to calibrate now. This lets a hotkey recalibrate
-        while another window (the game) has focus. The c key in the camera window always works too.
-    on_calibrated(): called after a successful calibration.
+    want_calibrate(): called every frame; return True to request a calibration. It happens
+        CALIBRATE_DELAY_S (5 s) later, with a countdown on screen, so the boxer can get into guard.
+        This lets a hotkey recalibrate while another window (the game) has focus. The c key in the
+        camera window always works too.
+    on_calibrated(): called when the calibration actually happens, after the countdown.
     on_features(now, speeds, travel, from_low): the raw numbers the punch decision uses, every frame.
         speeds = [left, right] wrist speed; travel = 2x3 array of (extension, right, up) per hand;
         from_low = [left, right] wrist started below the elbow. It may return a list of (side, kind)
@@ -164,6 +167,9 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     on_draw(frame): draw extra text on the camera image before it is shown.
     builtin_punches: set False to switch off this file's own punch check, so only the punches
         returned by on_features count (see punch_detector.py).
+    camera_index: which camera to open (0 is the default webcam).
+    on_pose(world, visibility): called every frame a body is found, with the 33 smoothed 3D world
+        landmarks (metres, origin at the hips) and how visible each one is.
     """
     ensure_model()
     landmarker = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
@@ -173,7 +179,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
         min_pose_presence_confidence=0.4,
         min_tracking_confidence=0.4,
     ))
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
         raise SystemExit("Could not open webcam")
 
@@ -184,6 +190,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     history = deque(maxlen=5)  # (time, wrist-relative-to-shoulder, wrist-below-elbow), ~0.2 s
     baseline = None
     calibrated_at = -10.0  # when the last calibration happened, for the on-screen flash
+    calibrate_at = None    # when a requested calibration will happen (it waits CALIBRATE_DELAY_S)
     last_punch = {"L": 0.0, "R": 0.0}
     flash = {"L": ("", 0.0), "R": ("", 0.0)}
     t0 = time.time()
@@ -212,6 +219,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
             vis = np.array([p.visibility for p in lm])
             world = smooth_world(np.array([[p.x, p.y, p.z] for p in result.pose_world_landmarks[0]]))
             sw = np.linalg.norm(world[L_SH] - world[R_SH]) + 1e-6
+            if on_pose:
+                on_pose(world, vis)
 
             wrist_below_elbow = world[[L_WR, R_WR], 1] > world[[L_EL, R_EL], 1]  # world y points down
             history.append((now, world[[L_WR, R_WR]] - world[[L_SH, R_SH]], wrist_below_elbow))
@@ -251,8 +260,11 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
 
         for n, text in enumerate(lines):
             cv2.putText(frame, text, (10, 30 + 30 * n), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        if calibrate_at is not None:
+            cv2.putText(frame, f"GET IN GUARD - calibrating in {max(0.0, calibrate_at - now):.0f}",
+                        (10, frame.shape[0] - 45), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 3)
         if baseline is None:
-            cv2.putText(frame, "stand in guard, then press C to calibrate", (10, frame.shape[0] - 15),
+            cv2.putText(frame, "press C, then get in guard: it calibrates 5 s later", (10, frame.shape[0] - 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         else:
             if now - calibrated_at < 1.5:
@@ -266,15 +278,22 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
         if on_frame and on_frame():
             break
         key = cv2.waitKey(1) & 0xFF
-        calibrate = key == ord("c") or bool(want_calibrate and want_calibrate())
-        if calibrate and result.pose_landmarks:
-            baseline = {"nose": img[NOSE].copy(), "sw": np.linalg.norm(img[L_SH] - img[R_SH])}
-            calibrated_at = now
-            print("Calibrated")
-            if on_calibrated:
-                on_calibrated()
-        elif calibrate:
-            print("Calibration skipped: no body in view")
+        requested = key == ord("c") or bool(want_calibrate and want_calibrate())
+        if requested and calibrate_at is None:
+            # Design rule: calibration waits CALIBRATE_DELAY_S after the request, so the boxer can get
+            # into guard after pressing the key (or after clicking back to the game for F7).
+            calibrate_at = now + CALIBRATE_DELAY_S
+            print(f"Calibrating in {CALIBRATE_DELAY_S:g} s: get into your guard")
+        if calibrate_at is not None and now >= calibrate_at:
+            calibrate_at = None
+            if result.pose_landmarks:
+                baseline = {"nose": img[NOSE].copy(), "sw": np.linalg.norm(img[L_SH] - img[R_SH])}
+                calibrated_at = now
+                print("Calibrated")
+                if on_calibrated:
+                    on_calibrated()
+            else:
+                print("Calibration skipped: no body in view. Press C to try again")
         elif key in (ord("a"), ord("d")):
             yaw += 0.15 if key == ord("d") else -0.15
         elif key == ord("q"):

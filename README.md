@@ -1,7 +1,21 @@
 # hack_trent_submission
 Hack Trent Boxing Submission
 
-A boxing motion tracker with two independent inputs: an MPU6050 motion sensor on a glove, and a webcam. The Python scripts don't import each other, so each one runs on its own and the glove and webcam data aren't combined yet.
+A left-hand boxing controller. A motion sensor on the glove and a webcam watch each punch, a random forest decides whether it was a jab, hook or uppercut, and the laptop presses that punch's key in a boxing game. The team's plan and decisions are in [PROJECT.md](PROJECT.md).
+
+## Main pipeline: glove and camera with a trained model
+
+| Step | Command | What it does |
+|---|---|---|
+| 1. Check the glove | `python glove_check.py`, then `python glove_receiver.py` | Confirms data arrives. The receiver also shows whether the button reads `HELD` |
+| 2. Pick the timeout | `python punch_tune.py` | Type a timeout in ms in the terminal and watch each punch's start and end on the camera window. `test 10 60 jab` runs a timed test and compares timeouts. Type `save` to keep the settings |
+| 3. Record | `python punch_capture.py` | Hold the glove button, throw one punch, release. Records 100 each of jab, hook and uppercut. Data stays in `punch_data/` |
+| 4. Train | `python punch_train.py` | Trains the random forest and reports glove-only, camera-only and combined accuracy. Saves `models/punch_rf.joblib` |
+| 5. Play | `python punch_live.py --live` | J jab, H hook, U uppercut, plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit |
+
+Every tool except training takes `--simulate`, which uses a fake glove so you can try it without hardware. Run the tests with `python -m unittest discover tests`. The supporting modules are `punch_segment.py` (finds where punches start and end), `punch_features.py` (turns a punch into model inputs), `punch_session.py` (shared buffers, settings and data files) and `punch_sim.py` (fake glove data, for testing only). Shared settings live in `punch_config.json`.
+
+The other scripts below came earlier and still work: Kadir's rule-based camera controller, and the wired Uno tracker.
 
 ## How the pieces connect
 
@@ -63,7 +77,7 @@ python pose_tracker.py
 
 | Key | Action |
 |---|---|
-| `c` | Calibrate while standing in guard, which is needed for duck and slip detection |
+| `c` | Calibrate: a 5-second countdown starts, so you can get into guard, then it records your stance. Needed for duck and slip detection |
 | `a` / `d` | Rotate the 3D view |
 | `q` | Quit |
 
@@ -87,7 +101,7 @@ The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the
 | File | Board | What it does |
 |---|---|---|
 | `firmware/punch_stream/punch_stream.ino` | Arduino Uno | Streams sensor data over USB to `punch_tracker.py`. Close the Serial Monitor first, because only one program can use the port. |
-| `firmware/glove_imu/glove_imu.ino` | AI Thinker ESP32-CAM | Sends sensor data over WiFi to `glove_receiver.py`. The camera isn't used. |
+| `firmware/glove_imu/glove_imu.ino` | AI Thinker ESP32-CAM | Sends sensor data over WiFi to `glove_receiver.py`, with the training button's state in every frame. The camera isn't used. Wire the button between GPIO12 and GND, and never to 3V3, or the board won't boot. |
 | `firmware/glove_imu/config.example.h` | ESP32-CAM | Template for your WiFi details. Copy it to `config.h` in the same folder and fill it in, or `glove_imu.ino` won't compile. Git ignores `config.h`, so your password stays on your computer. |
 | `firmware/sketch_nov6a/sketch_nov6a.ino` | Arduino Uno | Sensor test that shows roll, pitch and yaw on the Serial Plotter at 115200 baud. Its output doesn't work with the Python scripts. Yaw drifts over time. |
 
