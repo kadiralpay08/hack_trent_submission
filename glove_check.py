@@ -235,6 +235,8 @@ def main():
     parser.add_argument("--hz", type=int, default=500, help="sensor rate the firmware should produce")
     parser.add_argument("--punches", type=int, default=5, help="punches to throw in step 4")
     parser.add_argument("--punch-seconds", type=int, default=30)
+    parser.add_argument("--until", type=int, default=4, choices=[1, 2, 3, 4],
+                        help="stop after this step (steps 3 and 4 need you to hold still / punch)")
     args = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -252,9 +254,12 @@ def main():
     try:
         if step1_hear(sock, 10 if args.simulate else args.wait) is None:
             return 1
-        results["data quality"] = step2_quality(sock, 5, args.hz, check_rate=not args.simulate)
-        results["at rest"] = step3_rest(sock, 4)
-        results["punches"] = step4_punches(sock, args.punches, args.punch_seconds)
+        if args.until >= 2:
+            results["data quality"] = step2_quality(sock, 5, args.hz, check_rate=not args.simulate)
+        if args.until >= 3:
+            results["at rest"] = step3_rest(sock, 4)
+        if args.until >= 4:
+            results["punches"] = step4_punches(sock, args.punches, args.punch_seconds)
     except KeyboardInterrupt:
         say("\nStopped.")
         return 1

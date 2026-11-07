@@ -33,6 +33,10 @@ class Settings:
     min_up: float = 0.8         # uppercut: upward travel, with the hand low at some point in the burst
     guard_raise_up: float = 0.35  # the other hand rising at least this much means both are raising guard
     straight_ext: float = None  # jab/cross: arm extension needed; None = off (see module docstring)
+    early: bool = True          # fire as soon as the motion is clearly a hook or uppercut, not at the peak
+    early_inward: float = 1.2   # ...hook: sideways travel needed to be sure
+    early_up: float = 1.2       # ...uppercut: upward travel needed to be sure
+    early_ratio: float = 1.3    # ...and the winning direction must beat the other by this factor
 
 
 class _Hand:
@@ -54,6 +58,7 @@ class PunchDetector:
     def __init__(self, settings=None):
         self.s = settings or Settings()
         self.hands = {"L": _Hand("L"), "R": _Hand("R")}
+        self.latency_log = []  # (side, kind, seconds from the hand going fast to the decision)
 
     def update(self, now, speeds, travel, from_low):
         """speeds = [left, right]; travel = 2x3 (extension, right, up) per hand; from_low = [left, right]."""
@@ -87,13 +92,26 @@ class PunchDetector:
             h.active = True
         if not h.active:
             return None
-        if speed > s.drop_ratio * h.peak and now - h.began < s.max_wait:
-            return None  # still speeding up
-        kind = self._classify(h)
+        kind = self._classify_early(h) if s.early else None
+        if kind is None:
+            if speed > s.drop_ratio * h.peak and now - h.began < s.max_wait:
+                return None  # still speeding up
+            kind = self._classify(h)
         if kind is not None:
             h.last_fire, h.armed = now, False  # only a real punch locks the hand out
+            self.latency_log.append((h.side, kind, now - h.began))
         h.reset()
         return kind
+
+    def _classify_early(self, h):
+        """A hook or uppercut that is already unmistakable, so there is no need to wait for the peak."""
+        s = self.s
+        up = h.up if h.low else 0.0
+        if up >= s.early_up and up >= s.early_ratio * h.inward:
+            return "UPPERCUT"
+        if h.inward >= s.early_inward and h.inward >= s.early_ratio * max(up, h.ext):
+            return "HOOK"
+        return None
 
     def _classify(self, h):
         s = self.s

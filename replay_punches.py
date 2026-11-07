@@ -13,8 +13,6 @@ import glob
 import os
 from collections import Counter, OrderedDict
 
-import numpy as np
-
 import punch_detector
 
 NUMERIC = {"t", "rep", "spd_L", "spd_R", "ext_L", "right_L", "up_L", "low_L",

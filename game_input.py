@@ -109,6 +109,28 @@ class DryRunKeyboard(Keyboard):
         print(f"    key {'DOWN' if is_down else 'UP  '} {key}")
 
 
+def release_keys_when_console_ends(keyboard):
+    """Release every held key if the console is closed, Ctrl+C or Ctrl+Break arrives, or Windows shuts down.
+
+    atexit does not run when the console window is closed, and a key left pressed would stay down in
+    the operating system until you tapped it again. Windows only.
+    """
+    if sys.platform != "win32":
+        return
+    handler_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+
+    def handler(event):
+        keyboard.release_all()
+        return False  # carry on with Windows' normal handling, which ends the program
+
+    keyboard._console_handler = handler_type(handler)  # keep a reference so it is not garbage collected
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.SetConsoleCtrlHandler.argtypes = (handler_type, wintypes.BOOL)
+    kernel32.SetConsoleCtrlHandler.restype = wintypes.BOOL
+    if not kernel32.SetConsoleCtrlHandler(keyboard._console_handler, True):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
 class SendInputKeyboard(Keyboard):
     """Presses real keys on Windows. Input goes to whichever window has focus."""
 
@@ -116,6 +138,7 @@ class SendInputKeyboard(Keyboard):
         if sys.platform != "win32":
             raise OSError("live key presses are only supported on Windows")
         super().__init__()
+        release_keys_when_console_ends(self)
 
     def _send(self, key, is_down):
         flags = KEYEVENTF_SCANCODE
