@@ -5,6 +5,8 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch e
 
 ## Main pipeline: glove and camera with a trained model
 
+Every command and option is listed in [COMMANDS.md](COMMANDS.md). Flash the boards from the terminal with `python flash.py cam` (or `s3`, `cam-check`, `s3-check`).
+
 | Step | Command | What it does |
 |---|---|---|
 | 1. Check the glove | `python glove_check.py`, then `python glove_receiver.py` | Confirms data arrives. The receiver also shows whether the button reads `HELD` |
@@ -12,6 +14,8 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch e
 | 3. Record | `python punch_capture.py --person <name>` | The screen calls JAB, HOOK or UPPERCUT with a beep, in random order. Throw that punch. Records 100 of each, plus NONE (not a punch) examples from movement between prompts. `--target 20` makes a smaller set. `--button` uses the glove button instead. Data stays in `punch_data/` |
 | 4. Train | `python punch_train.py` | Trains the random forest and reports glove-only, camera-only and combined accuracy. Saves `models/punch_rf.joblib` |
 | 5. Play | `python punch_live.py --live` | J jab, H hook, U uppercut, plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit. **[** and **]** lower or raise the confidence cutoff while playing, with no retraining. `--confidence 0.7` and `--start-g 3` set the cutoff and the punch threshold at startup. `--popup` shows the camera as a small always-on-top window in a screen corner (`--popup-corner`, `--popup-size`) that never takes focus from the game and ignores clicks, so quit with F9. A game in exclusive full screen hides it |
+
+**Tracking mode and keybinds.** Hold the glove button (GPIO12 to GND) and your right hand steers the mouse like a joystick, from where it was when you pressed. Up and down move the view up and down; left and right move it left and right. While the button is held, punches use a second set of binds (by default jab = left click, hook = right click, uppercut = middle click, each held 150 ms), and the camera's block is off so a raised steering hand can't trigger it. Duck and slip still work. `python controls_editor.py` opens a keybind window with three sets: normal (button up), tracking (button held) and defence (camera). Click a bind, then press a key or click a mouse button. The window also chooses the steering style: speed (like a thumbstick) or position (like a trackpad), and how fast. Changes save to `mappings/controls.json` at once, and a running `punch_live.py` picks them up within a second. `--no-tracking` ignores the button.
 
 **Two gloves (optional).** Everything above is the left arm, and it is the default. A second glove on UDP port 5006 is the right arm: add `--arm right` to `punch_tune.py`, `punch_capture.py`, `punch_train.py` and `punch_live.py`. The right arm has its own recordings (`punch_data_right/`), model (`models/punch_rf_right.joblib`) and punches (CROSS = K, HOOK = H, UPPERCUT = U; its hook goes right, forward, left). Its camera features are mirrored, so a hook looks the same to both models. `python punch_live_both.py --live` runs both models side by side with one camera, and an arm with no model yet is left off. `glove_check.py --port 5006` checks the right glove. A glove with a magnetometer also gets magnetometer features. This is tested on simulated data only.
 

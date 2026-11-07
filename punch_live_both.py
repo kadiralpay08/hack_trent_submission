@@ -7,7 +7,7 @@ running side by side, with one camera for both.
 
 Left arm (port 5005, models/punch_rf.joblib):        JAB = J, HOOK = H, UPPERCUT = U
 Right arm (port 5006, models/punch_rf_right.joblib): CROSS = K, HOOK = H, UPPERCUT = U
-Defence (camera): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D. Keys from mappings/browser_boxing.json.
+Defence (camera): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D. Keys from mappings/controls.json (python controls_editor.py).
 If one arm has no trained model yet, the other still plays on its own.
 
 Hotkeys from any window: F8 key output on or off (with --live it starts OFF), F9 quit, [ and ] confidence
@@ -27,7 +27,8 @@ import punch_session as ps
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--live", action="store_true", help="really press keys (default: only print them)")
-    parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "browser_boxing.json"))
+    parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "controls.json"),
+                        help="controls file (edit it with controls_editor.py)")
     parser.add_argument("--simulate", action="store_true", help="fake gloves on both arms (no hardware)")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
     parser.add_argument("--camera", type=int, default=0)

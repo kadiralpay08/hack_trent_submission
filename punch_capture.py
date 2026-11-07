@@ -111,11 +111,12 @@ class Capture:
         """Check and save the data around [t0, t1] as one block. Returns the punch Segment or None."""
         imu, pose = self.sensors.window(t0 - PRE_S, t1 + POST_S)
         settings = self.sensors.settings
-        problem, segment, found = None, None, 0
+        problem, segment, found, gravity = None, None, 0, None
         if len(imu["t"]) < 0.6 * 500 * (t1 - t0 + PRE_S + POST_S):
             problem = "too little glove data arrived (WiFi dropping?)"
         else:
-            segments = punch_segment.find_segments(imu["t"], imu["accel"], imu["gyro"], settings)
+            gravity = self.sensors.gravity_at(imu["t"][0])
+            segments = punch_segment.find_segments(imu["t"], imu["accel"], imu["gyro"], settings, gravity)
             segment, found = punch_segment.pick_block_segment(segments, t0, t1)
             if segment is None:
                 problem = "no punch found"
@@ -123,7 +124,8 @@ class Capture:
                 problem = "the glove data had a gap during the punch"
         meta = {"label": label, "arm": self.arm.name, "press_t": t0, "release_t": t1, "session": self.session, "person": self.person,
                 "mode": self.MODE, "segment_settings": settings.to_dict(), "problem": problem,
-                "segments_found": found, "pose_frames": int(len(pose["t"]))}
+                "segments_found": found, "pose_frames": int(len(pose["t"])),
+                "start_gravity": None if gravity is None else [float(v) for v in gravity]}
         if problem:
             ps.save_block(label, imu, pose, meta, self.root, rejected=True)
             if not quiet:
@@ -326,8 +328,9 @@ class PromptedCapture(Capture):
             reason = self.not_ready_reason()
             title = "PAUSED" if self.paused else "READY TO RECORD"
             ps.put(frame, title, top, ORANGE if self.paused else YELLOW, 1.1, thick=3)
-            ps.put(frame, reason or "press . to " + ("carry on" if self.paused else "start"), top + 32,
-                   ORANGE if reason else (255, 255, 255), 0.7)
+            if reason != "no glove data":  # that one already shows in red below
+                ps.put(frame, reason or "press . to " + ("carry on" if self.paused else "start"), top + 32,
+                       ORANGE if reason else (255, 255, 255), 0.7)
         elif self.phase == "announce":
             ps.put(frame, f"GET IN GUARD - starting in {max(0.0, self.phase_end - now):.0f}", top, YELLOW, 1.0, thick=3)
         elif self.phase == "rest":

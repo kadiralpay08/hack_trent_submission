@@ -287,6 +287,8 @@ class Tuner:
             state = test["state"]
             if state == "waiting":
                 reason = self.not_ready_reason()
+                if reason == "no glove data":  # already shown in red at the top
+                    reason = "waiting"
                 text, colour = f"TEST {test['what']}: " + (reason if reason else "press . to start"), (ORANGE if reason else YELLOW)
             elif state == "countdown":
                 text, colour = f"TEST {test['what']}: starting in {max(0.0, test['go_wall'] - now):.0f}", YELLOW

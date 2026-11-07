@@ -100,6 +100,7 @@ class LiveSensors:
         # (t, t_us, ax, ay, az, gx, gy, gz, button, mx, my, mz, mag_ok); mag is 0 and not ok without one
         self.imu = deque(maxlen=int(seconds * 600))
         self.pose = deque(maxlen=int(seconds * 40))   # (t, world 33x3, visibility 33)
+        self.gravity_log = deque(maxlen=int(seconds * 60))  # (t, live gravity estimate), for gravity_at()
         self.events = queue.Queue()
         self.segmenter = punch_segment.Segmenter(settings)
         self.button = False
@@ -136,8 +137,17 @@ class LiveSensors:
                 self.button = s.button
                 self.events.put(("press" if s.button else "release", s.t))
             event = self.segmenter.feed(s.t, s.accel, s.gyro)
+            if self.samples_seen % 10 == 0 and self.segmenter.gravity is not None:
+                self.gravity_log.append((s.t, self.segmenter.gravity.copy()))
         if event:
             self.events.put(event)
+
+    def gravity_at(self, t):
+        """The live gravity estimate (glove axes, unit length) at time t, or None. Saved with each
+        recording so training can cut it the way live play does, even if the glove was moving."""
+        with self.lock:
+            before = [g for gt, g in self.gravity_log if gt <= t]
+        return before[-1] if before else None
 
     def glove_ok(self, within=0.5):
         return time.time() - self.last_sample_wall < within
@@ -163,6 +173,11 @@ class LiveSensors:
     def latest_pose_t(self):
         with self.lock:
             return self.pose[-1][0] if self.pose else None
+
+    def latest_pose(self):
+        """The newest camera frame as (t, world 33x3, visibility 33), or None. Used for steering."""
+        with self.lock:
+            return self.pose[-1] if self.pose else None
 
     def window(self, t0, t1):
         """Glove and pose data between t0 and t1, as arrays (see block format below)."""

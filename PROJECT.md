@@ -60,6 +60,8 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | Low-confidence predictions press no key | The model only knows three classes, so other movement must not be forced into one of them |
 | A second arm is optional and fully separate (2026-11-07) | The right glove uses port 5006, its own data folder, model and punches (CROSS, HOOK, UPPERCUT), selected with `--arm right`. The left arm keeps its original data and model, and stays the default. Camera features are mirrored for the right arm |
 | The glove sends to one laptop's address, not broadcast (2026-11-07) | Broadcast over the phone hotspot lost about a third of the samples, in gaps of up to about 350 ms, enough to swallow a whole punch. Sending to one address gets WiFi's automatic re-sends. To use another computer, flash its address |
+| Tracking mode on the glove button (2026-11-07) | Holding the button turns the right hand into a mouse joystick (camera, right wrist relative to the right shoulder, from where it was at the press), and switches punches to a tracking set of binds (default: mouse clicks, held 150 ms). The camera's BLOCK is off while tracking, because the steering hand sits near the face; duck and slip stay on. Speed and position steering are both available. Binds live in `mappings/controls.json` (normal, tracking and defence sets) and are edited with `controls_editor.py`; `browser_boxing.json` keeps the older format, which still loads |
+| Recordings save the live gravity estimate (2026-11-07) | NONE examples happen while moving, so the saved slice never shows the glove still, and a fresh punch finder (which waits for stillness) found nothing: every NONE was rejected. Capture now saves `start_gravity`, and capture and training start the punch finder from it |
 | Separate live script, `controller.py` left unchanged | Keeps Kadir's rule-based controller as a demo fallback |
 
 ## Code map
@@ -77,6 +79,8 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | `punch_live.py` | Classifies punches live and presses keys |
 | `punch_config.json` | Shared punch-finding settings |
 | `punch_sim.py` | Fake glove data that follows the punch definitions. Used by `--simulate` and the tests. It shows the code runs, not that the model works on real punches |
+| `hand_aim.py` | Tracking mode: right-hand steering of the mouse while the glove button is held |
+| `controls_editor.py` | Keybind window for `mappings/controls.json` |
 | `punch_live_both.py` | Runs the left and right models side by side, with one camera |
 | `tests/test_punch_pipeline.py` | Run with `python -m unittest discover tests` |
 
