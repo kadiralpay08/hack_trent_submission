@@ -147,7 +147,7 @@ def draw_3d(world, vis, yaw, size=480, scale=250):
 
 
 def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
-         on_features=None, on_draw=None, builtin_punches=True):
+         on_features=None, on_draw=None, builtin_punches=True, camera_index=0, on_pose=None):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
@@ -164,6 +164,9 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     on_draw(frame): draw extra text on the camera image before it is shown.
     builtin_punches: set False to switch off this file's own punch check, so only the punches
         returned by on_features count (see punch_detector.py).
+    camera_index: which camera to open (0 is the default webcam).
+    on_pose(world, visibility): called every frame a body is found, with the 33 smoothed 3D world
+        landmarks (metres, origin at the hips) and how visible each one is.
     """
     ensure_model()
     landmarker = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
@@ -173,7 +176,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
         min_pose_presence_confidence=0.4,
         min_tracking_confidence=0.4,
     ))
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
         raise SystemExit("Could not open webcam")
 
@@ -212,6 +215,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
             vis = np.array([p.visibility for p in lm])
             world = smooth_world(np.array([[p.x, p.y, p.z] for p in result.pose_world_landmarks[0]]))
             sw = np.linalg.norm(world[L_SH] - world[R_SH]) + 1e-6
+            if on_pose:
+                on_pose(world, vis)
 
             wrist_below_elbow = world[[L_WR, R_WR], 1] > world[[L_EL, R_EL], 1]  # world y points down
             history.append((now, world[[L_WR, R_WR]] - world[[L_SH, R_SH]], wrist_below_elbow))
