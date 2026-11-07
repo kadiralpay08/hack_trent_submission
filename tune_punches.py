@@ -33,7 +33,7 @@ BLOCKS = [
 GO, REST = 1.3, 1.2  # seconds
 
 
-def build_timeline(ready_seconds=8.0):
+def build_timeline(ready_seconds=8.0, ready_text="Hands up in guard. Head and both hands in view."):
     """List of (start, end, phase, kind, hand, rep, title, subtitle)."""
     segs, t = [], 0.0
 
@@ -42,7 +42,7 @@ def build_timeline(ready_seconds=8.0):
         segs.append((t, t + duration, phase, kind, hand, rep, title, subtitle))
         t += duration
 
-    add(ready_seconds, "ready", "", "", 0, "GET READY", "Hands up in guard. Head and both hands in view.")
+    add(ready_seconds, "ready", "", "", 0, "GET READY", ready_text)
     for kind, hand, what, reps in BLOCKS:
         add(4.0, "announce", kind, hand, 0, "NEXT", what)
         for rep in range(1, reps + 1):
@@ -122,18 +122,46 @@ class Session:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--variant", help="record for this product variant (see python play.py); its guidance "
+                                          "is shown and the session is saved under tuning_data/<variant>/")
+    parser.add_argument("--camera", type=int, default=0, help="camera number (0 is the default webcam)")
     parser.add_argument("--max-seconds", type=float, help="stop early (used for testing the tool)")
-    parser.add_argument("--ready-seconds", type=float, default=8.0)
+    parser.add_argument("--ready-seconds", type=float, help="time to get into position (default 8, or 15 with --variant)")
     args = parser.parse_args()
 
-    session = Session(build_timeline(args.ready_seconds), args.max_seconds)
+    root = os.path.dirname(os.path.abspath(__file__))
+    variant, extras, folder, ready_text = None, {}, os.path.join(root, "tuning_data"), "Hands up in guard. Head and both hands in view."
+    if args.variant:
+        import variants
+        try:
+            variant = variants.get(args.variant)
+        except ValueError as e:
+            raise SystemExit(str(e))
+        extras = variant.extra_callbacks(args, text_y=135)  # below the prompt banner
+        folder, ready_text = variant.data_dir, variant.tuning_short
+        print(variant.tuning_prompt())
+    ready = args.ready_seconds if args.ready_seconds else (15.0 if variant else 8.0)
+
+    session = Session(build_timeline(ready, ready_text), args.max_seconds)
+    extra_draw = extras.get("on_draw")
+
+    def draw(frame):
+        session.on_draw(frame)
+        if extra_draw:
+            extra_draw(frame)
+
     print(f"Session length about {session.end:.0f} s. Look at the camera window.")
     try:
-        pose_tracker.main(on_punch=session.on_punch, on_features=session.on_features,
-                          on_draw=session.on_draw, on_frame=session.on_frame)
+        pose_tracker.main(on_punch=session.on_punch, on_features=session.on_features, on_draw=draw,
+                          on_frame=session.on_frame, camera_index=args.camera, on_pose=extras.get("on_pose"))
     finally:
-        path = session.save(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tuning_data"))
+        path = session.save(folder)
         print(f"Saved {len(session.rows)} frames to {path}")
+        note = variant.session_note() if variant else ""
+        if note:
+            print(note)
+            with open(path[:-4] + ".txt", "w", encoding="utf-8") as f:
+                f.write(f"variant: {variant.name}\n{note}\n")
 
 
 if __name__ == "__main__":

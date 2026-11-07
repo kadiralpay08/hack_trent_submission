@@ -80,6 +80,20 @@ python glove_receiver.py --simulate  # fake a glove, with no hardware needed
 
 To tell two gloves apart, add their IP addresses to `GLOVE_BY_IP`. Any glove not listed is treated as `L`. If the sensor is mounted at an angle, set `AXIS_MAP` and `AXIS_SIGN`.
 
+### `play.py`
+Plays a boxing game with your body, using one of the product variants we are testing. `python play.py` lists them. Each variant has its own settings and its own recorded tuning sessions, so choosing one never changes another. Adding a variant means adding a folder, with no other file edited. See `variants/README.md` for the three versions, how to try the 45 degree camera, and how to add a variant.
+```powershell
+python play.py                        # list the variants
+python play.py angled_camera          # dry run: prints the keys it would press
+python play.py angled_camera --live   # presses keys in whichever window has focus
+```
+| Key | Action |
+|---|---|
+| `F7` | Calibrate or recalibrate, from any window. Stand in guard first. |
+| `F8` | Turn key output on or off. A live run starts off. |
+| `F9` | Quit |
+
+The tuning tools take the same `--variant` option: `python tune_punches.py --variant angled_camera` records a guided punching session, and `python replay_punches.py --variant angled_camera` scores the variant's settings on it, with no camera needed.
 ## Firmware
 
 The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the ESP32 board package (core 3.x). Each sketch lists its wiring at the top of the file.
