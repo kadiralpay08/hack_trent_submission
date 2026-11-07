@@ -60,7 +60,7 @@ def score_test(imu, pose, intervals, settings, classifier=None, kind=None, timeo
 
 
 class Tuner:
-    def __init__(self, sensors, config):
+    def __init__(self, sensors, config, arm=None):
         self.sensors, self.config = sensors, config
         self.marks = []          # (t, colour) for the trace
         self.active = None       # Segment in progress
@@ -71,11 +71,13 @@ class Tuner:
         self.message, self.message_t = "", 0.0
         self.test = None         # the timed test, if one is set up
         self.report, self.report_t = [], 0.0
-        self.classifier = ps.Classifier() if ps.Classifier.exists() else None
+        self.arm = arm or ps.ARMS["left"]
+        path = self.arm.model_path
+        self.classifier = ps.Classifier(path) if ps.Classifier.exists(path) else None
 
     # --- typed commands ---
     def command(self, line):
-        line = line.strip().lstrip("﻿").strip()  # ﻿: a byte-order mark PowerShell can add
+        line = line.strip().lstrip("\ufeff").strip()  # a byte-order mark PowerShell can add
         dots_only = bool(line) and set(line) == {"."}
         # The "." key works in every window, so pressing it while the terminal has focus also types a dot
         # there. Ignore dots at the ends of a line (inner ones, as in 0.35, are kept).
@@ -311,16 +313,20 @@ class Tuner:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ps.add_arm_argument(parser)
     parser.add_argument("--simulate", action="store_true", help="use a fake glove (no hardware)")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
     parser.add_argument("--camera", type=int, default=0)
-    parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
+    parser.add_argument("--port", type=int, help="UDP port the glove sends to (default: the arm's, 5005 or 5006)")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
     args = parser.parse_args()
 
     config = ps.load_config()
-    sensors = ps.LiveSensors(config["segment"], seconds=150, simulate=args.simulate, port=args.port)  # room for a 2-minute test
-    tuner = Tuner(sensors, config)
+    arm = ps.ARMS[args.arm]
+    args.port = args.port or arm.port
+    print(f"{arm.name.upper()} ARM: glove on port {args.port}")
+    sensors = ps.LiveSensors(config["segment"], seconds=150, simulate=args.simulate, port=args.port, arm=arm)  # room for a 2-minute test
+    tuner = Tuner(sensors, config, arm)
     if tuner.classifier:
         print(f"Model loaded (trained {tuner.classifier.info['trained_at']}), so timed tests classify punches.")
     threading.Thread(target=tuner.read_terminal, daemon=True).start()

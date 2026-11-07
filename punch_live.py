@@ -39,8 +39,11 @@ GREEN, ORANGE, GREY, YELLOW = (0, 220, 0), (0, 150, 255), (190, 190, 190), (0, 2
 
 
 class LivePlay:
-    def __init__(self, sensors, classifier, game, log=print):
+    """One arm: its glove, its model, and the keys its punches press. punch_live_both.py runs two."""
+
+    def __init__(self, sensors, classifier, game, log=print, name="", x=10, scale=1.0, footer=True):
         self.sensors, self.clf, self.game, self.log = sensors, classifier, game, log
+        self.name, self.x, self.scale, self.footer = name, x, scale, footer  # where this arm draws its text
         self.waiting = []        # finished punches waiting for their last camera frame
         self.shown, self.shown_t = "", 0.0
         self.count = 0
@@ -69,11 +72,11 @@ class LivePlay:
         timing = f"{1000 * seg.duration:.0f} ms punch ({'stopped' if seg.reason == 'decel' else 'timeout'}), +{delay:.0f} ms to decide"
         if label == "NONE":
             self.show(f"not a punch ({100 * conf:.0f}%): no key", GREY)
-            self.log(f"movement {self.count}: not a punch {100 * conf:.0f}% | {timing}")
+            self.log(f"{self.name}movement {self.count}: not a punch {100 * conf:.0f}% | {timing}")
             return
         if label is None or conf < self.clf.min_confidence:
             self.show(f"unsure ({label} {100 * conf:.0f}%): no key", ORANGE)
-            self.log(f"punch {self.count}: unsure, best guess {label} {100 * conf:.0f}% | {timing}")
+            self.log(f"{self.name}punch {self.count}: unsure, best guess {label} {100 * conf:.0f}% | {timing}")
             return
         if not self.game.enabled:
             note = "output OFF, press F8"
@@ -82,19 +85,23 @@ class LivePlay:
         else:
             note = "no key mapped, or key already down"
         self.show(f"{label} {100 * conf:.0f}%  ({note})", GREEN)
-        self.log(f"punch {self.count}: {label} {100 * conf:.0f}% -> {note} | {timing}")
+        self.log(f"{self.name}punch {self.count}: {label} {100 * conf:.0f}% -> {note} | {timing}")
 
     def show(self, text, colour):
         self.shown, self.shown_colour, self.shown_t = text, colour, time.time()
 
     def on_draw(self, frame):
-        top = 150
+        top, x, s = 150, self.x, self.scale
+        if self.name:
+            ps.put(frame, self.name.strip(" :"), top - 30, YELLOW, 0.6 * s + 0.1, x=x)
         if not self.sensors.glove_ok():
-            ps.put(frame, "NO GLOVE DATA", top, (0, 0, 255), 0.8)
+            ps.put(frame, "NO GLOVE DATA", top, (0, 0, 255), 0.8 * s, x=x)
         elif not self.sensors.segmenter.ready:
-            ps.put(frame, "hold the glove still for a moment...", top, ORANGE, 0.7)
+            ps.put(frame, "hold the glove still...", top, ORANGE, 0.7 * s, x=x)
         if time.time() - self.shown_t < 1.5:
-            ps.put(frame, self.shown, top + 40, self.shown_colour, 1.0, thick=3)
+            ps.put(frame, self.shown, top + 40, self.shown_colour, 1.0 * s, thick=3 if s >= 1 else 2, x=x)
+        if not self.footer:
+            return
         ps.put(frame, f"key output {'ON' if self.game.enabled else 'OFF (F8)'}  |  F7 calibrate  F9 quit  F11 full screen",
                frame.shape[0] - ps.TEXT_BOTTOM, YELLOW if self.game.enabled else GREY, 0.5)
         ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  ([ looser, ] stricter)"
@@ -123,7 +130,8 @@ class LivePlay:
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--live", action="store_true", help="really press keys (default: only print them)")
-    parser.add_argument("--model", default=ps.MODEL_PATH)
+    ps.add_arm_argument(parser)
+    parser.add_argument("--model", help="trained model (default: the arm's model file)")
     parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "browser_boxing.json"))
     parser.add_argument("--simulate", action="store_true", help="fake glove (no hardware)")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
@@ -132,16 +140,18 @@ def main():
     parser.add_argument("--popup-corner", choices=popup_window.CORNERS, default="bottom-right")
     parser.add_argument("--popup-size", type=int, default=360, help="popup width in pixels")
     parser.add_argument("--camera", type=int, default=0)
-    parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
+    parser.add_argument("--port", type=int, help="UDP port the glove sends to (default: the arm's, 5005 or 5006)")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
     parser.add_argument("--confidence", type=float, help="how sure the model must be to press a key, 0 to 1 "
                         "(default: min_confidence in punch_config.json)")
     parser.add_argument("--start-g", type=float, help="how hard a movement must be to count as a punch, in g "
                         "(default: what the model was trained with)")
     args = parser.parse_args()
+    arm = ps.ARMS[args.arm]
+    args.model, args.port = args.model or arm.model_path, args.port or arm.port
 
     if not ps.Classifier.exists(args.model):
-        print(f"No model at {args.model}. Record with punch_capture.py, then run punch_train.py.")
+        print(f"No model at {args.model}. Record with punch_capture.py --arm {arm.name}, then run punch_train.py --arm {arm.name}.")
         return 1
     clf = ps.Classifier(args.model, args.confidence)
     current = ps.load_config()["segment"]
@@ -162,7 +172,7 @@ def main():
     game = game_input.GameInput(mapping, keyboard)
     game.set_enabled(not args.live)  # a dry run is harmless, so it starts on; live starts off
 
-    sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=args.port)
+    sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=args.port, arm=arm)
     play = LivePlay(sensors, clf, game)
 
     # Defence keys, calibration and the F7/F8/F9 hotkeys come from controller.py; punches come from the model.
