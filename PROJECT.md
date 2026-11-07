@@ -53,6 +53,7 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts**. For each one: press 
 | Button on GPIO12, wired to GND | GND wiring can't pull this boot-sensitive pin high. **Never connect GPIO12 to 3V3**, or the board won't boot |
 | Button state travels in the frame's second sync byte: `A5 5A` released, `A5 5B` pressed | Every frame carries it, so a lost packet can't lose a press, and firmware without a button still works |
 | Deceleration only ends a punch once the arm settles | Uppercuts and hooks reverse direction mid-punch, and a reversal also looks like high deceleration |
+| Calibration waits 5 seconds after C or F7, with an on-screen countdown | Design rule: gives the boxer time to get into guard, or to click back into the game, before the stance is recorded. Applies to every tool built on `pose_tracker.py`, through `CALIBRATE_DELAY_S` |
 | Low-confidence predictions press no key | The model only knows three classes, so other movement must not be forced into one of them |
 | Separate live script, `controller.py` left unchanged | Keeps Kadir's rule-based controller as a demo fallback |
 

@@ -8,7 +8,7 @@ Punches (glove and camera together, via the model from punch_train.py): JAB = J,
 Defence (camera only, as in controller.py): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D.
 Keys come from mappings/browser_boxing.json. A punch the model is unsure about presses nothing.
 
-Hotkeys work from any window: F7 calibrate (stand in guard; needed for duck and slip), F8 key output
+Hotkeys work from any window: F7 calibrate (5 s countdown to get into guard; needed for duck and slip), F8 key output
 on or off (with --live it starts OFF), F9 quit.
 
 The key is pressed when the punch ENDS (it stops, or the timeout runs out), because the model needs

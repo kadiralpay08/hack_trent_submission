@@ -77,7 +77,7 @@ python pose_tracker.py
 
 | Key | Action |
 |---|---|
-| `c` | Calibrate while standing in guard, which is needed for duck and slip detection |
+| `c` | Calibrate: a 5-second countdown starts, so you can get into guard, then it records your stance. Needed for duck and slip detection |
 | `a` / `d` | Rotate the 3D view |
 | `q` | Quit |
 
