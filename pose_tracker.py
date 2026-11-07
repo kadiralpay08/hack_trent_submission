@@ -146,7 +146,8 @@ def draw_3d(world, vis, yaw, size=480, scale=250):
     return canvas
 
 
-def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None):
+def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
+         on_features=None, on_draw=None):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
@@ -156,6 +157,10 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     want_calibrate(): called every frame; return True to calibrate now. This lets a hotkey recalibrate
         while another window (the game) has focus. The c key in the camera window always works too.
     on_calibrated(): called after a successful calibration.
+    on_features(now, speeds, travel, from_low): the raw numbers the punch decision uses, every frame.
+        speeds = [left, right] wrist speed; travel = 2x3 array of (extension, right, up) per hand;
+        from_low = [left, right] wrist started below the elbow. Used by tune_punches.py.
+    on_draw(frame): draw extra text on the camera image before it is shown.
     """
     ensure_model()
     landmarker = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
@@ -223,6 +228,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
                             flash[side] = (f"{kind} {speeds[i]:.1f}", now)
                             if on_punch:
                                 on_punch(kind, side, speeds[i])
+                if on_features:
+                    on_features(now, list(speeds), travel, list(history[0][2]))
 
             states = body_state(img, world, sw, baseline)
             if on_states:
@@ -247,6 +254,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 3)
             cv2.putText(frame, "C = recalibrate", (10, frame.shape[0] - 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+        if on_draw:
+            on_draw(frame)
         cv2.imshow("Pose", frame)
         if on_frame and on_frame():
             break
