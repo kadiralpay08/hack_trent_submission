@@ -207,7 +207,8 @@ def fit_window(name, frame_w, frame_h):
 
 def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
          on_features=None, on_draw=None, builtin_punches=True, camera_index=0, on_pose=None,
-         big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY_S, fullscreen=False, state_keys=None):
+         big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY_S, fullscreen=False, state_keys=None,
+         on_key=None):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
@@ -234,6 +235,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     show_3d: set False to skip the 3D skeleton window.
     calibrate_delay: seconds to wait between a calibrate request and the calibration itself (0 = at once).
     fullscreen: show the camera window full screen. set_fullscreen() switches it while running.
+    on_key(key): called with each key pressed in the camera window (an 8-bit code) before this function's own
+        shortcuts (c, a, d, q); return True to use it up, so typing text doesn't calibrate or quit.
     state_keys(state): the key a defence state (such as SLIP LEFT) is pressing right now, or None. Slips are
         shown beside the torso, with this key under them.
     Layout: this function draws its calibration messages in the bottom BOTTOM_RESERVED pixels of the
@@ -360,6 +363,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
         if on_frame and on_frame():
             break
         key = cv2.waitKey(1) & 0xFF
+        if key != 255 and on_key and on_key(key):
+            key = 255  # the tool used it (for example typing a name), so it is not a shortcut here
         if key == ord("c") or bool(want_calibrate and want_calibrate()):
             # Design rule (PROJECT.md): calibration waits calibrate_delay after the request, so the boxer can
             # get into guard after pressing the key, or after clicking back to the game for F7.

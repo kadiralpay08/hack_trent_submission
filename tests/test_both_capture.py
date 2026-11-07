@@ -28,10 +28,10 @@ class FakeSensors:
         return self.now_t
 
 
-def make_capture(tmp, target=4, seed=1):
+def make_capture(tmp, target=4, seed=1, person="test"):
     punch_capture.beep = lambda kind: None
     recorders = {}
-    cap = punch_capture.BothCapture(recorders, target, rng=random.Random(seed))
+    cap = punch_capture.BothCapture(recorders, target, rng=random.Random(seed), person=person)
     cap.say = lambda *a, **k: None
     for name in ("left", "right"):
         arm = ps.ARMS[name]
@@ -128,6 +128,36 @@ class BothArms(unittest.TestCase):
             punch_capture.main(["--both", "--arm", "right"])
         with self.assertRaises(SystemExit):
             punch_capture.main(["--right-phone", "1.2.3.4"])
+
+
+class NameInTheCameraWindow(unittest.TestCase):
+    def test_typed_name_is_cleaned_and_shared_by_both_arms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cap = make_capture(tmp, person="")
+            cap.on_calibrated()
+            self.assertIn("type your name", cap.not_ready_reason())
+            cap.toggle()
+            self.assertEqual(cap.phase, "waiting")                   # can't start without a name
+            for ch in "Sam Leex":
+                self.assertTrue(cap.on_key(ord(ch)))                 # used up: c, a, d, q don't act as shortcuts
+            cap.on_key(8)                                            # Backspace
+            cap.on_key(ord("."))                                     # not allowed in a name
+            self.assertTrue(cap.on_key(13))                          # Enter
+            self.assertEqual(cap.names.name, "sam_lee")
+            self.assertEqual({rec.names.name for rec in cap.recorders.values()}, {"sam_lee"})
+            self.assertFalse(cap.on_key(ord("c")))                   # after the name, keys work as usual
+            cap.toggle()
+            self.assertEqual(cap.phase, "announce")
+
+    def test_enter_on_an_empty_name_does_nothing(self):
+        entry = punch_capture.NameEntry()
+        entry.key(ord(" "))
+        entry.key(13)
+        self.assertTrue(entry.waiting)
+
+    def test_person_option_skips_the_question(self):
+        self.assertFalse(punch_capture.NameEntry("Andre").waiting)
+        self.assertEqual(punch_capture.NameEntry("Andre").name, "andre")
 
 
 class NoneThatRunsToTheTimeout(unittest.TestCase):

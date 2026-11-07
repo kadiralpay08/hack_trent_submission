@@ -69,11 +69,53 @@ def beep(kind):
     threading.Thread(target=winsound.Beep, args=(TONES.get(kind, 700), 120), daemon=True).start()
 
 
+def clean_name(text):
+    """One lower-case word, so punch_sessions.py --person NAME works in a command: "Sam Lee" -> "sam_lee"."""
+    return "_".join(text.lower().split())
+
+
+class NameEntry:
+    """The boxer types their name in the camera window before recording (Backspace deletes, Enter confirms).
+    Every recording carries it, so one person's data can be deleted later: punch_sessions.py --person NAME.
+    Skipped when --person is given."""
+    ALLOWED = set("abcdefghijklmnopqrstuvwxyz0123456789 _-")
+
+    def __init__(self, given=""):
+        self.text, self.name = "", clean_name(given or "") or None
+
+    @property
+    def waiting(self):
+        return self.name is None
+
+    def key(self, k):
+        """A key from the camera window. While the name is being typed, every key goes to it."""
+        if not self.waiting:
+            return False
+        if k in (10, 13):
+            if clean_name(self.text):
+                self.name = clean_name(self.text)
+                print(f"Recording as '{self.name}'. Delete this person's data later with: "
+                      f"python punch_sessions.py --person {self.name}")
+        elif k == 8:
+            self.text = self.text[:-1]
+        elif k == 27:
+            self.text = ""
+        elif chr(k).lower() in self.ALLOWED and len(self.text) < 24:
+            self.text += chr(k)
+        return True
+
+    def draw(self, frame, top):
+        ps.put(frame, "WHO IS PUNCHING?", top, YELLOW, 1.2, thick=3)
+        ps.put(frame, f"name: {self.text}_", top + 45, WHITE, 1.0, thick=2)
+        ps.put(frame, "type it here, then press Enter (Backspace deletes)", top + 80, WHITE, 0.6)
+
+
 class Capture:
     """Shared by both modes: counting, saving and checking blocks, undo, and the terminal."""
 
     def __init__(self, sensors, config, target, root, person, arm=None):
-        self.sensors, self.config, self.target, self.root, self.person = sensors, config, target, root, person
+        self.sensors, self.config, self.target, self.root = sensors, config, target, root
+        self.names = NameEntry(person)  # typed in the camera window unless --person was given
         self.arm = arm or ps.ARMS["left"]
         self.how = self.arm.how
         self.keys = {label[0].lower(): label for label in self.arm.labels}  # j or c, h, u
@@ -87,6 +129,9 @@ class Capture:
 
     def on_calibrated(self):
         self.calibrated = True
+
+    def on_key(self, key):
+        return self.names.key(key)
 
     def remaining(self):
         return {k: max(0, self.target - self.counts.get(k, 0)) for k in self.arm.labels}
@@ -156,7 +201,7 @@ class Capture:
                 problem = "no punch found"
             elif segment.reason == "gap":
                 problem = "the glove data had a gap during the punch"
-        meta = {"label": label, "arm": self.arm.name, "press_t": t0, "release_t": t1, "session": self.session, "person": self.person,
+        meta = {"label": label, "arm": self.arm.name, "press_t": t0, "release_t": t1, "session": self.session, "person": self.names.name or "",
                 "mode": self.MODE, "segment_settings": settings.to_dict(), "problem": problem,
                 "segments_found": found, "pose_frames": int(len(pose["t"])),
                 "start_gravity": None if gravity is None else [float(v) for v in gravity]}
@@ -208,7 +253,9 @@ class ButtonCapture(Capture):
 
     def finish(self, press_t, release_t):
         label, held = self.label, release_t - press_t
-        if label is None:
+        if self.names.waiting:
+            self.say("NOT SAVED: type your name in the camera window first, then press Enter", RED)
+        elif label is None:
             self.say("all punches are done; type j, h or u to record more", ORANGE)
         elif held < MIN_HOLD_S:
             self.say(f"NOT SAVED: button held only {1000 * held:.0f} ms", RED)
@@ -225,6 +272,9 @@ class ButtonCapture(Capture):
     def on_draw(self, frame):
         h = frame.shape[0]
         top = 150
+        if self.names.waiting:
+            self.names.draw(frame, top)
+            return
         if self.label:
             ps.put(frame, f"{self.label}  {self.counts.get(self.label, 0)}/{self.target}", top, YELLOW, 1.1, thick=3)
             ps.put(frame, f"hold button, punch {self.how[self.label]}, release", top + 32, (255, 255, 255), 0.6)
@@ -256,6 +306,8 @@ class PromptedCapture(Capture):
             super().command(word)
 
     def not_ready_reason(self):
+        if self.names.waiting:
+            return "type your name in the camera window, then press Enter"
         if not self.sensors.glove_ok():
             return "no glove data"
         if not self.sensors.segmenter.ready:
@@ -359,6 +411,9 @@ class PromptedCapture(Capture):
     def on_draw(self, frame):
         h, now = frame.shape[0], time.time()
         top = 150
+        if self.names.waiting:
+            self.names.draw(frame, top)
+            return
         if self.phase == "waiting" or self.paused:
             reason = self.not_ready_reason()
             title = "PAUSED" if self.paused else "READY TO RECORD"
@@ -396,6 +451,7 @@ class ArmRecorder(Capture):
     def __init__(self, owner, *args):
         super().__init__(*args)
         self.owner = owner
+        self.names = owner.names  # one name for both arms
         self.none_pending = []   # this arm's Segments to save as NONE once their data has arrived
 
     def say(self, text, colour=WHITE):
@@ -415,8 +471,9 @@ class BothCapture:
     MODE = "prompted_both"
     HELP = PromptedCapture.HELP
 
-    def __init__(self, recorders, target, rng=None):
+    def __init__(self, recorders, target, rng=None, person=""):
         self.recorders = recorders          # {"left": ArmRecorder, "right": ArmRecorder}
+        self.names = NameEntry(person)      # typed in the camera window unless --person was given
         self.target = target
         self.rng = rng or random.Random()
         self.phase, self.phase_end, self.combo = "waiting", None, None
@@ -466,7 +523,12 @@ class BothCapture:
         if self.phase == "waiting":
             self.say("calibrated. Press . to start", GREEN)
 
+    def on_key(self, key):
+        return self.names.key(key)
+
     def not_ready_reason(self):
+        if self.names.waiting:
+            return "type your name in the camera window, then press Enter"
         for name, rec in self.recorders.items():
             if not rec.sensors.glove_ok():
                 return f"no {name} arm data"
@@ -620,6 +682,9 @@ class BothCapture:
     def on_draw(self, frame):
         h, now = frame.shape[0], time.time()
         top = 150
+        if self.names.waiting:
+            self.names.draw(frame, top)
+            return
         if self.phase == "waiting" or self.paused:
             reason = self.not_ready_reason()
             ps.put(frame, "PAUSED" if self.paused else "READY TO RECORD (BOTH ARMS)", top,
@@ -665,21 +730,6 @@ def draw_common(cap, frame, row, button_held):
         ps.put(frame, cap.result[:75], h - ps.TEXT_BOTTOM - 25, cap.result_colour, 0.55)
 
 
-def ask_person(given=""):
-    """Who is punching. Every recording carries it, so one person's data can be deleted later with
-    punch_sessions.py --person NAME. Asked for when --person is left out; stored in lower case, spaces as _."""
-    name = (given or "").strip()
-    while not name:
-        try:
-            name = input("Who is punching? Type their name and press Enter: ").strip()
-        except EOFError:  # no terminal to ask (a test or a script)
-            name = "unknown"
-            print("No name given, so these recordings are saved as 'unknown'.")
-    name = "_".join(name.lower().split())  # one word, so --person NAME works in a command
-    print(f"Recording as '{name}'. Delete this person's data later with: python punch_sessions.py --person {name}")
-    return name
-
-
 def train_arm(arm, recorded):
     """One and done: train the arm's model on everything in its folder (NONE included) when a session saved
     anything. The model it replaces is kept beside it as .bak."""
@@ -701,10 +751,9 @@ def main_both(args):
     if clash:
         raise SystemExit(f"--both records each arm to its own folder and port, so it can't be used with {', '.join(clash)}."
                          " For a phone as the right arm, use --right-phone ADDRESS.")
-    args.person = ask_person(args.person)
     config = ps.load_config()
     recorders = {}
-    cap = BothCapture(recorders, args.target)
+    cap = BothCapture(recorders, args.target, person=args.person)
     for name in ("left", "right"):
         arm = ps.ARMS[name]
         phone = args.right_phone if name == "right" else None
@@ -726,7 +775,7 @@ def main_both(args):
     import pose_tracker
     try:
         pose_tracker.main(on_frame=on_frame, on_draw=cap.on_draw, on_calibrated=cap.on_calibrated,
-                          camera_index=args.camera, fullscreen=not args.windowed,
+                          camera_index=args.camera, fullscreen=not args.windowed, on_key=cap.on_key,
                           **ps.shared_pose_callbacks(*[rec.sensors for rec in recorders.values()]))
     finally:
         for rec in recorders.values():
@@ -744,7 +793,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--target", type=int, default=100, help="punches wanted of each kind")
     parser.add_argument("--person", default="", help="who is punching, saved with each recording so one person's "
-                        "data can be deleted later (punch_sessions.py --person NAME). Asked for if left out")
+                        "data can be deleted later (punch_sessions.py --person NAME). If left out, it is typed in the camera window")
     parser.add_argument("--button", action="store_true", help="hold the glove button around each punch")
     ps.add_arm_argument(parser)
     ps.add_phone_argument(parser)
@@ -769,8 +818,6 @@ def main(argv=None):
     arm = ps.ARMS[args.arm]
     args.data, args.port = args.data or arm.data_dir, args.port or arm.port
 
-    ps.phone_for(args)  # check the options before asking anything
-    args.person = ask_person(args.person)
     config = ps.load_config()
     sensors = ps.LiveSensors(config["segment"], simulate=args.simulate, port=args.port, arm=arm, phone=ps.phone_for(args))
     cls = ButtonCapture if args.button else PromptedCapture
@@ -789,7 +836,8 @@ def main(argv=None):
     import pose_tracker
     try:
         pose_tracker.main(on_frame=on_frame, on_draw=cap.on_draw, on_calibrated=cap.on_calibrated,
-                          camera_index=args.camera, fullscreen=not args.windowed, **sensors.pose_callbacks())
+                          camera_index=args.camera, fullscreen=not args.windowed, on_key=cap.on_key,
+                          **sensors.pose_callbacks())
     finally:
         sensors.close()
     print("Saved this session:", len(cap.saved), "| totals:", cap.counts)
