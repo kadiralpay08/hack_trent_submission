@@ -30,8 +30,9 @@ Only one tool can listen to a glove at a time. Close one (`q`, F9 or the window)
 |---|---|
 | 1. Flash the glove (only if its WiFi or IP changed) | `py flash.py cam --ip auto` |
 | 2. Check the data arrives | `py glove_check.py --until 2` |
-| 3. Record punches | `py punch_capture.py --target 40 --person andre` |
-| 4. Train | `py punch_train.py` |
+| 3. Record punches (trains by itself when it ends) | `py punch_capture.py --target 40 --person andre` |
+| 3b. Or both arms in one session | `py punch_capture.py --both --right-phone 172.20.10.1 --target 40 --person andre` |
+| 4. Train again by hand (only if needed) | `py punch_train.py` |
 | 5. Set up keybinds (optional) | `py controls_editor.py` |
 | 6. Play | `py punch_live.py --live --windowed` |
 
@@ -108,6 +109,11 @@ Example: `py glove_check.py --until 2 --wait 20`
 | `--port N` | UDP port number | The arm's: `5005` or `5006` | Listen for the glove on another port |
 | `--max-seconds N` | Seconds | none (runs until done) | Stop by itself after N seconds (for testing) |
 | `--simulate` | switch | off | Fake glove, no hardware |
+| `--both` | switch | off | Record **both arms in one session**, in combos such as `1. LEFT HOOK  2. RIGHT UPPERCUT`: throw both, in that order, within 2.4 s of the beep. Half the combos start with each arm, shuffled. Each punch is saved to its own arm's folder, so each arm still trains on its own. Can't be combined with `--arm`, `--phone`, `--data`, `--port` or `--button` |
+| `--right-phone ADDRESS` | The phyphox address, such as `172.20.10.1` | none (right glove on port 5006) | With `--both`: use a phone as the right arm |
+| `--no-train` | switch | off (it trains) | Don't train when the session ends. By default every arm that recorded something is retrained on all its recordings, NONE included, and the old model is kept as `models/<name>.joblib.bak` |
+
+**Both arms:** NONE examples are collected for both arms. Once the punches are done, if an arm has fewer NONE examples than `--target`, up to 6 more MOVE rounds (15 s each) top it up.
 
 **NONE examples:** in "MOVE, DON'T PUNCH" rounds, move sharply (snap your guard, feint, bob). Each one saved shows `saved NONE n` in the terminal.
 

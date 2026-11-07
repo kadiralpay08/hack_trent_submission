@@ -42,7 +42,7 @@ import punch_session as ps
 # browser game F5 reloads the page and F6 jumps to the address bar. Browsers and the games ignore [ ].
 VK_LOWER, VK_RAISE = 0xDB, 0xDD  # [ and ]
 
-GREEN, ORANGE, GREY, YELLOW = (0, 220, 0), (0, 150, 255), (190, 190, 190), (0, 255, 255)
+GREEN, ORANGE, WHITE, YELLOW = (0, 220, 0), (0, 150, 255), (255, 255, 255), (0, 255, 255)
 
 
 class LivePlay:
@@ -78,7 +78,7 @@ class LivePlay:
         delay = 1000 * (time.time() - seen_at)
         timing = f"{1000 * seg.duration:.0f} ms punch ({'stopped' if seg.reason == 'decel' else 'timeout'}), +{delay:.0f} ms to decide"
         if label == "NONE":
-            self.show(f"not a punch ({100 * conf:.0f}%): no key", GREY)
+            self.show(f"not a punch ({100 * conf:.0f}%): no key", WHITE)
             self.log(f"{self.name}movement {self.count}: not a punch {100 * conf:.0f}% | {timing}")
             return
         if label is None or conf < self.clf.min_confidence:
@@ -110,9 +110,9 @@ class LivePlay:
         if not self.footer:
             return
         ps.put(frame, f"key output {'ON' if self.game.enabled else 'OFF (F8)'}  |  F7 calibrate  F9 quit  F11 full screen",
-               frame.shape[0] - ps.TEXT_BOTTOM, YELLOW if self.game.enabled else GREY, 0.5)
+               frame.shape[0] - ps.TEXT_BOTTOM, YELLOW if self.game.enabled else WHITE, 0.5)
         ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  ([ looser, ] stricter)"
-               f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - ps.TEXT_BOTTOM - 25, GREY, 0.5)
+               f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - ps.TEXT_BOTTOM - 25, WHITE, 0.5)
 
     def on_draw_popup(self, frame):
         """A sparse picture for the corner popup. The border colour says it at a glance: green = keys on,
@@ -123,7 +123,7 @@ class LivePlay:
             colour = (0, 0, 255)
             ps.put(frame, "NO GLOVE DATA", 110, colour, 1.0, thick=3)
         else:
-            colour = GREEN if self.game.enabled else GREY
+            colour = GREEN if self.game.enabled else WHITE
         cv2.rectangle(frame, (0, 0), (w - 1, h - 1), colour, 10)
         if time.time() - self.shown_t < 1.5:
             ps.put(frame, self.shown, 150, self.shown_colour, 0.9, thick=3)
@@ -258,7 +258,8 @@ def main():
             if tracking:
                 tracking.draw(frame, ps.put)
 
-    callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=fullscreen)
+    callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=fullscreen,
+                     state_keys=game.key_for_state)
 
     print(f"Model trained {clf.info['trained_at']} on {clf.info['counts']}, "
           f"cross-validated accuracy {100 * clf.info['cv_accuracy']:.0f}%.")

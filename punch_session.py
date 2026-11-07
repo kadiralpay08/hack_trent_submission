@@ -408,6 +408,6 @@ def draw_trace(frame, times, values, now, seconds, top_g, marks, origin, size, t
 
 
 def put(frame, text, row, colour=(255, 255, 255), scale=0.6, x=10, thick=2):
-    import cv2
-    cv2.putText(frame, text, (x, row), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thick + 3)
-    cv2.putText(frame, text, (x, row), cv2.FONT_HERSHEY_SIMPLEX, scale, colour, thick)
+    """Outlined text. On the camera window it is drawn at the window's real size, so it stays sharp (overlay.py)."""
+    import overlay
+    overlay.outlined_text(frame, text, x, row, scale, colour, thick)

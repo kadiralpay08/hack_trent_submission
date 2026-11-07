@@ -302,6 +302,11 @@ class GameInput:
             self.keyboard.press(key)
         self._state_keys = wanted
 
+    def key_for_state(self, state):
+        """The key a defence state is holding down right now (for the screen), or None."""
+        key = self.mapping.holds.get(state.upper())
+        return key if key in self._state_keys else None
+
     def set_tracking(self, on):
         """The glove button: held = tracking set and steering, up = normal set."""
         if on != self.tracking:

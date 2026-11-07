@@ -126,8 +126,29 @@ def draw(frame, img, vis, flash, now):
     for side, idx in (("L", L_WR), ("R", R_WR)):
         text, t = flash[side]
         if now - t < 0.6:
-            cv2.putText(frame, text, (px[idx][0] + 10, px[idx][1] - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            overlay.outlined_text(frame, text, px[idx][0] + 10, px[idx][1] - 10, 0.9, (0, 0, 255), 2)
+
+
+def draw_slips(frame, img, vis, states, state_keys=None):
+    """SLIP LEFT / SLIP RIGHT beside the torso, on the side the boxer moved to, with the key it is pressing."""
+    if not any(s.startswith("SLIP") for s in states) or min(vis[L_SH], vis[R_SH]) < 0.4:
+        return
+    h, w = frame.shape[:2]
+    k = h / 480
+    px = img * [w, h]
+    body = [i for i in (L_SH, R_SH, L_HIP, R_HIP) if vis[i] > 0.4]
+    y = float(np.mean([px[i][1] for i in body]))
+    edges = {"SLIP LEFT": (min(px[i][0] for i in body) - 25 * k, "right"),
+             "SLIP RIGHT": (max(px[i][0] for i in body) + 25 * k, "left")}
+    for state, (x, align) in edges.items():
+        if state not in states:
+            continue
+        x = min(max(x, 10 * k), w - 10 * k)
+        overlay.outlined_text(frame, state, x, y, 1.1 * k, (0, 255, 255), 3 * k, max_width=w / 2.5, align=align)
+        key = state_keys(state) if state_keys else None
+        if key:
+            overlay.outlined_text(frame, f"key {str(key).upper()}", x, y + 45 * k, 1.3 * k, (0, 255, 0), 3 * k,
+                                  align=align)
 
 
 def level(world):
@@ -166,6 +187,15 @@ def screen_size():
         return 1280, 720
 
 
+def window_size(name, frame):
+    """(width, height) the window shows its picture at, for drawing text at that size."""
+    try:
+        _, _, w, h = cv2.getWindowImageRect(name)
+    except cv2.error:
+        w = h = 0
+    return (w, h) if w > 0 and h > 0 else (frame.shape[1], frame.shape[0])
+
+
 def fit_window(name, frame_w, frame_h):
     """Make the named window as large as the screen allows (leaving room for title bar and taskbar),
     keeping the picture's shape."""
@@ -177,7 +207,7 @@ def fit_window(name, frame_w, frame_h):
 
 def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
          on_features=None, on_draw=None, builtin_punches=True, camera_index=0, on_pose=None,
-         big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY_S, fullscreen=False):
+         big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY_S, fullscreen=False, state_keys=None):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
@@ -204,6 +234,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     show_3d: set False to skip the 3D skeleton window.
     calibrate_delay: seconds to wait between a calibrate request and the calibration itself (0 = at once).
     fullscreen: show the camera window full screen. set_fullscreen() switches it while running.
+    state_keys(state): the key a defence state (such as SLIP LEFT) is pressing right now, or None. Slips are
+        shown beside the torso, with this key under them.
     Layout: this function draws its calibration messages in the bottom BOTTOM_RESERVED pixels of the
     camera image; on_draw should keep its own text above that, so nothing covers them.
     """
@@ -252,6 +284,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
         result = landmarker.detect_for_video(
             mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), int((now - t0) * 1000))
         frame = cv2.flip(frame, 1)  # mirror for display only; image x is flipped to match
+        overlay.begin_layer(frame)  # text on this picture is drawn at the window's real size, so it stays sharp
         lines = ["no body detected"]
 
         if result.pose_landmarks:
@@ -293,6 +326,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
             lines = [" | ".join(states) or "ok",
                      f"speed L {speeds[0]:.1f}  R {speeds[1]:.1f}"]
             draw(frame, img, vis, flash, now)
+            draw_slips(frame, img, vis, states, state_keys)
             if show_3d:
                 cv2.imshow("3D skeleton", draw_3d(world, vis, yaw))
         else:
@@ -302,16 +336,14 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
                 on_states([])  # nobody in view: let go of any held keys
 
         for n, text in enumerate(lines):
-            cv2.putText(frame, text, (10, 30 + 30 * n), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            overlay.outlined_text(frame, text, 10, 30 + 30 * n, 0.8, (255, 255, 255), 2)
         if baseline is None:
-            cv2.putText(frame, f"press C, then get in guard: it calibrates {calibrate_delay:g} s later",
-                        (10, frame.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            overlay.outlined_text(frame, f"press C, then get in guard: it calibrates {calibrate_delay:g} s later",
+                                  10, frame.shape[0] - 15, 0.6, (0, 255, 255), 2)
         else:
             if now - calibrated_at < 1.5:
-                cv2.putText(frame, "CALIBRATED", (10, frame.shape[0] - 45),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 3)
-            cv2.putText(frame, "C = recalibrate", (10, frame.shape[0] - 15),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+                overlay.outlined_text(frame, "CALIBRATED", 10, frame.shape[0] - 45, 1.0, (0, 255, 0), 3)
+            overlay.outlined_text(frame, "C = recalibrate", 10, frame.shape[0] - 15, 0.5, (255, 255, 255), 1)
         if calibrate_at is not None:  # big enough to read from a few metres, over the top of everything else
             h, w = frame.shape[:2]
             k = h / 480
@@ -321,7 +353,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
                                   6.0 * k, (0, 255, 255), 10 * k, align="centre")
         if on_draw:
             on_draw(frame)
-        cv2.imshow("Pose", frame)
+        cv2.imshow("Pose", overlay.finish_layer(frame, *window_size("Pose", frame)))
         if not sized:
             fit_window("Pose", frame.shape[1], frame.shape[0])
             sized = True
