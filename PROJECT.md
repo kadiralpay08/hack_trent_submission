@@ -56,7 +56,7 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | Calibration waits 5 seconds after C or F7, with an on-screen countdown | Design rule: gives the boxer time to get into guard, or to click back into the game, before the stance is recorded. Applies to every tool built on `pose_tracker.py`, through `CALIBRATE_DELAY_S` |
 | Training is prompted by a timer, not the button (2026-11-07) | Holding a button changes your grip and fist compared with play, and the timer naturally collects not-a-punch examples. The button stays as `--button` |
 | A fourth class, NONE, for movement that isn't a punch | Anything the punch finder catches reaches the model in play. Without NONE, every guard adjustment would become a jab, hook or uppercut |
-| Sensitivity is adjustable without retraining | The confidence cutoff comes from `punch_config.json` or `--confidence`, not the model, and F5/F6 change it while playing. `--start-g` moves the punch threshold, but only small changes are safe; big ones need a retrain. The timeout always needs a retrain |
+| Sensitivity is adjustable without retraining | The confidence cutoff comes from `punch_config.json` or `--confidence`, not the model, and the [ and ] keys change it while playing (not F5/F6, which reload a browser game). `--start-g` moves the punch threshold, but only small changes are safe; big ones need a retrain. The timeout always needs a retrain |
 | Low-confidence predictions press no key | The model only knows three classes, so other movement must not be forced into one of them |
 | Separate live script, `controller.py` left unchanged | Keeps Kadir's rule-based controller as a demo fallback |
 

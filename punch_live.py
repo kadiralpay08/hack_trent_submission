@@ -13,7 +13,7 @@ Hotkeys work from any window: F7 calibrate (5 s countdown to get into guard; nee
 on or off (with --live it starts OFF), F9 quit.
 
 Sensitivity, with no retraining:
-  F5 / F6           confidence cutoff down / up by 5 points while playing (shown on screen). Lower = presses
+  [ / ]             confidence cutoff down / up by 5 points while playing (shown on screen). Lower = presses
                     more keys, including more wrong ones. Higher = fewer wrong keys, more missed punches.
   --confidence 0.7  start at this cutoff (otherwise min_confidence in punch_config.json, default 0.6)
   --start-g 3       how hard a movement must be to count as a punch at all (the model was trained at
@@ -29,7 +29,9 @@ import time
 import punch_segment
 import punch_session as ps
 
-VK_F5, VK_F6 = 0x74, 0x75
+# [ and ] change the confidence cutoff. Not F5/F6: these keys also reach the focused window, and in a
+# browser game F5 reloads the page and F6 jumps to the address bar. Browsers and the games ignore [ ].
+VK_LOWER, VK_RAISE = 0xDB, 0xDD  # [ and ]
 
 GREEN, ORANGE, GREY, YELLOW = (0, 220, 0), (0, 150, 255), (190, 190, 190), (0, 255, 255)
 
@@ -93,7 +95,7 @@ class LivePlay:
             ps.put(frame, self.shown, top + 40, self.shown_colour, 1.0, thick=3)
         ps.put(frame, f"key output {'ON' if self.game.enabled else 'OFF (F8)'}  |  F7 calibrate  F9 quit  F11 full screen",
                frame.shape[0] - ps.TEXT_BOTTOM, YELLOW if self.game.enabled else GREY, 0.5)
-        ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  (F5 looser, F6 stricter)"
+        ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  ([ looser, ] stricter)"
                f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - ps.TEXT_BOTTOM - 25, GREY, 0.5)
 
     def adjust_confidence(self, step):
@@ -154,9 +156,9 @@ def main():
     def on_frame():
         play.poll()
         screen_keys.poll_fullscreen()
-        if sensitivity_keys.pressed(VK_F5):
+        if sensitivity_keys.pressed(VK_LOWER):
             play.adjust_confidence(-0.05)
-        if sensitivity_keys.pressed(VK_F6):
+        if sensitivity_keys.pressed(VK_RAISE):
             play.adjust_confidence(+0.05)
         return hotkey_frame() or bool(args.max_seconds and time.time() - started > args.max_seconds)
 
@@ -166,7 +168,7 @@ def main():
     print(f"Model trained {clf.info['trained_at']} on {clf.info['counts']}, "
           f"cross-validated accuracy {100 * clf.info['cv_accuracy']:.0f}%.")
     print(f"Timeout {1000 * clf.segment.timeout_s:.0f} ms, start {clf.segment.start_g:g} g, "
-          f"confidence cutoff {100 * clf.min_confidence:.0f}% (F5/F6 to change). Keys: {mapping.taps}")
+          f"confidence cutoff {100 * clf.min_confidence:.0f}% ([ and ] to change). Keys: {mapping.taps}")
     print("LIVE: keys go to the focused window." if args.live else "Dry run: nothing is pressed.")
     print(f"Key output is {'ON' if game.enabled else 'OFF'}. F7 calibrates, F8 toggles output, F9 quits.")
     import pose_tracker
