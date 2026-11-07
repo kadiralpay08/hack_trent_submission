@@ -39,7 +39,7 @@ PUNCH_SPEED = 4.0       # wrist speed (shoulder-widths/s) that starts a punch
 MIN_TRAVEL = 0.4        # wrist travel (shoulder-widths) needed to call a punch type
 PUNCH_COOLDOWN = 0.25   # seconds
 LEAD = "L"              # lead hand throws the jab (orthodox = "L")
-CALIBRATE_DELAY = 5.0   # seconds between pressing calibrate and it happening, to walk back and get in guard
+CALIBRATE_DELAY_S = 5.0  # seconds from pressing C (or F7) to calibrating, to get into guard first
 
 
 def ensure_model():
@@ -171,18 +171,18 @@ def fit_window(name, frame_w, frame_h):
 
 def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
          on_features=None, on_draw=None, builtin_punches=True, camera_index=0, on_pose=None,
-         big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY):
+         big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY_S):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
     on_states(states): called every frame with the body-state labels active right now (BLOCK, DUCK,
         SLIP LEFT, SLIP RIGHT, GUARD DOWN). It gets an empty list when nobody is in view.
     on_frame(): called every frame; return True to stop the tracker.
-    want_calibrate(): called every frame; return True to calibrate. This lets a hotkey recalibrate
+    want_calibrate(): called every frame; return True to request a calibration. It happens
+        calibrate_delay seconds later (CALIBRATE_DELAY_S, 5 s), with a countdown on screen, so the boxer
+        can get into guard. A second request during the wait restarts it. This lets a hotkey recalibrate
         while another window (the game) has focus. The c key in the camera window always works too.
-        Calibration happens calibrate_delay seconds after the request, so the boxer can step back and get in
-        guard. A second request during the wait restarts it.
-    on_calibrated(): called after a successful calibration.
+    on_calibrated(): called when the calibration actually happens, after the countdown.
     on_features(now, speeds, travel, from_low): the raw numbers the punch decision uses, every frame.
         speeds = [left, right] wrist speed; travel = 2x3 array of (extension, right, up) per hand;
         from_low = [left, right] wrist started below the elbow. It may return a list of (side, kind)
@@ -293,8 +293,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
         for n, text in enumerate(lines):
             cv2.putText(frame, text, (10, 30 + 30 * n), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
         if baseline is None:
-            cv2.putText(frame, f"press C, then get in guard ({calibrate_delay:.0f} s)", (10, frame.shape[0] - 15),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            cv2.putText(frame, f"press C, then get in guard: it calibrates {calibrate_delay:g} s later",
+                        (10, frame.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         else:
             if now - calibrated_at < 1.5:
                 cv2.putText(frame, "CALIBRATED", (10, frame.shape[0] - 45),
@@ -318,9 +318,12 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
             break
         key = cv2.waitKey(1) & 0xFF
         if key == ord("c") or bool(want_calibrate and want_calibrate()):
-            calibrate_at = now + calibrate_delay  # a repeat press while waiting restarts the wait
+            # Design rule (PROJECT.md): calibration waits calibrate_delay after the request, so the boxer can
+            # get into guard after pressing the key, or after clicking back to the game for F7.
+            # A repeat press while waiting restarts the wait.
+            calibrate_at = now + calibrate_delay
             if calibrate_delay > 0:
-                print(f"Calibrating in {calibrate_delay:.0f} s: get in guard")
+                print(f"Calibrating in {calibrate_delay:g} s: get into your guard")
         if calibrate_at is not None and now >= calibrate_at:
             calibrate_at = None
             if result.pose_landmarks:
@@ -330,7 +333,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
                 if on_calibrated:
                     on_calibrated()
             else:
-                print("Calibration skipped: no body in view")
+                print("Calibration skipped: no body in view. Press C to try again")
         elif key in (ord("a"), ord("d")):
             yaw += 0.15 if key == ord("d") else -0.15
         elif key == ord("q"):

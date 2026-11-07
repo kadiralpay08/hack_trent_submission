@@ -11,6 +11,8 @@
  *   MPU6050 GND -> ESP32-CAM GND
  *   MPU6050 SDA -> ESP32-CAM pin set in MPU_SDA_PIN (default GPIO13)
  *   MPU6050 SCL -> ESP32-CAM pin set in MPU_SCL_PIN (default GPIO14)
+ *   Training button -> between GPIO12 (BUTTON_PIN) and GND. NEVER wire it to 3V3: GPIO12
+ *   held high at power on stops the board booting. Wired to GND it is always safe.
  *   Power the ESP32-CAM from a solid 5 V supply, because WiFi draws current spikes
  *   that can reset the board on a weak one.
  *
@@ -25,6 +27,8 @@
  *   Each packet holds FRAMES_PER_PACKET frames, one after another, in this 19-byte format:
  *   0xA5 0x5A | timestamp in microseconds (uint32, little-endian)
  *   | ax ay az gx gy gz (int16, big-endian) | XOR of timestamp and sensor bytes
+ *   The second byte is 0x5B instead of 0x5A while the training button is held, so every
+ *   frame carries the button state and a lost packet cannot lose a press or release.
  *
  * SENSOR SETTINGS:
  *   Accel +-16 g (2048 LSB/g), gyro +-2000 deg/s (16.4 LSB per deg/s), 500 Hz.
@@ -45,6 +49,8 @@ const uint16_t UDP_PORT = 5005;
 // ------------------------------------------------------
 
 const int STATUS_LED_PIN = 33;  // small red LED on the back of the board, on when driven LOW
+const int BUTTON_PIN = 12;      // training button to GND; reads LOW while pressed
+const uint8_t BUTTON_DEBOUNCE_SAMPLES = 5;  // 5 samples at 500 Hz = 10 ms of steady reading
 
 const uint8_t MPU6050_ADDR = 0x68;  // change to 0x69 if AD0 pin is pulled high
 const uint32_t I2C_CLOCK_HZ = 400000;
@@ -112,7 +118,21 @@ void restoreSensorIfReset() {
   }
 }
 
-bool readFrame(uint8_t* frame) {
+// Returns the debounced button state. Called once per sample, so it needs no timer.
+bool buttonPressed() {
+  static bool stable = false;
+  static uint8_t differentFor = 0;
+  bool raw = digitalRead(BUTTON_PIN) == LOW;
+  if (raw == stable) {
+    differentFor = 0;
+  } else if (++differentFor >= BUTTON_DEBOUNCE_SAMPLES) {
+    stable = raw;
+    differentFor = 0;
+  }
+  return stable;
+}
+
+bool readFrame(uint8_t* frame, bool pressed) {
   uint32_t timestamp = micros();
 
   Wire.beginTransmission(MPU6050_ADDR);
@@ -128,7 +148,7 @@ bool readFrame(uint8_t* frame) {
   }
 
   frame[0] = 0xA5;
-  frame[1] = 0x5A;
+  frame[1] = pressed ? 0x5B : 0x5A;
   frame[2] = timestamp & 0xFF;
   frame[3] = (timestamp >> 8) & 0xFF;
   frame[4] = (timestamp >> 16) & 0xFF;
@@ -151,7 +171,7 @@ void sensorTask(void*) {
   while (true) {
     vTaskDelayUntil(&lastWake, SAMPLE_PERIOD_TICKS);
     restoreSensorIfReset();
-    if (!readFrame(frame)) {
+    if (!readFrame(frame, buttonPressed())) {
       sensorErrors = sensorErrors + 1;
       continue;
     }
@@ -191,6 +211,7 @@ void networkTask(void*) {
 void setup() {
   pinMode(STATUS_LED_PIN, OUTPUT);
   digitalWrite(STATUS_LED_PIN, LOW);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   Serial.begin(115200);
   Serial.println();
