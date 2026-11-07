@@ -35,6 +35,7 @@ Keys that work in any window, no Enter needed:
 Type in THIS TERMINAL, then Enter:
   p       pause or resume (prompted mode), the same as "."
   x       undo the last saved punch (moves it to the arm's _rejected/ folder)
+  discard throw away this whole session and quit without training (punch_sessions.py --restore brings it back)
   j/h/u   button mode only: switch to JAB / HOOK / UPPERCUT
   q       quit (everything saved so far is kept); q in the camera window also works
 
@@ -104,6 +105,9 @@ class Capture:
     def command(self, word):
         if word == "x":
             self.undo()
+        elif word == "discard":
+            self.discard()
+            self.quit = True
         elif word in ("q", "quit"):
             self.quit = True
         elif word:
@@ -119,6 +123,17 @@ class Capture:
         shutil.move(path, os.path.join(folder, "undone_" + os.path.basename(path)))
         self.counts[label] -= 1
         self.say(f"undid the last {label} ({self.counts[label]})", ORANGE)
+
+    def discard(self):
+        """Throw away everything this session saved (recoverable: punch_sessions.py --restore <session>)."""
+        for path, label in self.saved:
+            folder = os.path.join(self.root, "_deleted", self.session, label)
+            os.makedirs(folder, exist_ok=True)
+            shutil.move(path, os.path.join(folder, os.path.basename(path)))
+            self.counts[label] -= 1
+        n, self.saved = len(self.saved), []
+        self.say(f"discarded this session ({n} recordings). Bring it back with: "
+                 f"python punch_sessions.py --restore {self.session}", ORANGE)
 
     def save_block(self, label, t0, t1, quiet=False, extra=None):
         """Check and save the data around [t0, t1] as one block. Returns the punch Segment or None.
@@ -218,7 +233,7 @@ class ButtonCapture(Capture):
 
 class PromptedCapture(Capture):
     MODE = "prompted"
-    HELP = "calibrate with C, then press . to start (. pauses and resumes); terminal: x undo, q quit"
+    HELP = "calibrate with C, then press . to start (. pauses and resumes); terminal: x undo, discard, q quit"
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -429,6 +444,10 @@ class BothCapture:
                 self.recorders[self.order.pop()].undo()
             else:
                 self.say("nothing to undo")
+        elif word == "discard":
+            for rec in self.recorders.values():
+                rec.discard()
+            self.order, self.quit = [], True
         elif word in ("q", "quit"):
             self.quit = True
         elif word:
@@ -674,7 +693,9 @@ def main_both(args):
         source = f"phone at {phone}" if phone else f"glove on port {arm.port}"
         print(f"{name.upper()} ARM: punches {', '.join(arm.labels)}, {source}, recording to "
               f"{os.path.relpath(arm.data_dir)} | already have: {recorders[name].counts}")
-    print(cap.HELP)
+    for rec in recorders.values():  # one session name for both arms, so it is listed and deleted as one
+        rec.session = recorders["left"].session
+    print(f"Session {recorders['left'].session}. " + cap.HELP)
     threading.Thread(target=cap.read_terminal, daemon=True).start()
     keys = ps.ToolKeys(fullscreen=not args.windowed)
     started = time.time()

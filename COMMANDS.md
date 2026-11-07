@@ -95,7 +95,7 @@ Example: `py glove_check.py --until 2 --wait 20`
 **Controls:**
 - In the camera window, **C** calibrates: a 5 s countdown, then stand in guard.
 - **.** (full stop) starts, and pauses or resumes. It works from any window.
-- In the terminal, `x` + Enter undoes the last saved punch, and `q` + Enter quits.
+- In the terminal, `x` + Enter undoes the last saved punch, `discard` + Enter throws away the whole session and quits without training, and `q` + Enter quits.
 
 | Option | Value | Default | What it does |
 |---|---|---|---|
@@ -118,6 +118,22 @@ Example: `py glove_check.py --until 2 --wait 20`
 **NONE examples:** in "MOVE, DON'T PUNCH" rounds, move sharply (snap your guard, feint, bob). Each one saved shows `saved NONE n` in the terminal.
 
 **Where recordings go:** `punch_data/<PUNCH>/`. Folders starting with `_` are ignored: `_rejected` holds failed attempts, and `_old_mpu6050` the old sensor's data.
+
+---
+
+## `punch_sessions.py`: keep or delete whole sessions
+
+A session is one run of `punch_capture.py`, named by the time it started (such as `20261107_182011`). Both arms of a `--both` session share one name. Deleting moves the recordings to `<arm folder>/_deleted/<session>/`, which training ignores, so nothing is lost.
+
+| Command | What it does |
+|---|---|
+| `py punch_sessions.py` | List every session used for training: who, when, and how many of each punch per arm |
+| `py punch_sessions.py --delete SESSION` | Delete one or more sessions (both arms), then retrain. `last` means the newest |
+| `py punch_sessions.py --person NAME` | Delete everything one person recorded, then retrain |
+| `py punch_sessions.py --deleted` | List deleted sessions |
+| `py punch_sessions.py --restore SESSION` | Bring deleted sessions back, then retrain |
+
+Add `--yes` to skip the "are you sure", and `--no-train` to skip retraining. Recordings with a bad `--person` name can't be told apart, so always set `--person` when recording.
 
 ---
 
