@@ -1,0 +1,141 @@
+Do i need to connect the esp32 and my laptop to my hotspot now?
+
+---
+
+Ok ive connected the esp32 cam with the writing board attached through a usb port, remember, its not actively connected to the circuit when i write, i have to write, remove it from the writer, and then plug it into the breadboard.
+
+---
+
+do i need to click the reset pin before removing it from the programmer?
+
+---
+
+its on the braedboard and powered
+
+---
+
+the laptop we're using is this current one right now
+
+---
+
+i dont see the python file running here?
+
+---
+
+esp32 wasnt properly wired to 5v and ground, it is now, try ow
+
+---
+
+wait, i forgot to press the button, run it again
+
+---
+
+check now
+
+---
+
+check now
+
+---
+
+what jumper are you talking about
+
+---
+
+i didnt inclue this bs jumper, check again, ive made the cables diagonal
+
+---
+
+wait i forgot to press again, run it once mroe
+
+---
+
+im doing the 350ms one, and theyre all timing out, but i can see on the graph it displays the big acceleration spike and then drop way before the yellow bar that shows the time out, why is this happening?
+
+---
+
+make the calibration wait 5 seconds before calibrating and uplaod that as a deisgn rule to the enitre brain
+
+---
+
+ok can you push the code to the repo
+
+---
+
+ok make the pull request for kadir
+
+---
+
+Ok, what is the next steps? I see that we can detect a punch, is there any rudementary way to implement punch detection? maybe we do not need the random forest anyway
+
+---
+
+Ok i did git switch main, git pull, go back o my branch now. I need incredibly cleer instructions for how to run the training program, how the data is stored, and what files to run
+
+---
+
+you say close each file after use, do they all close with q?
+
+---
+
+do you actually need the button pressed? or are you including it because i told you to?
+
+---
+
+Wouldnt it filtering out other movent actually be bad? dont we need to train it to work with noisy movement? also the button is o nthe glove, so what is the tradeoff between the button vs the timer? i feel like the timer is better
+
+---
+
+I hear it making beeps what is that for? also i pressed q and closed the program
+
+---
+
+ok make the pull request
+
+---
+
+Can you give me a breakdown of what all the -- commands do for thee files and a breakdown of the new files? by default try to summarize everything post prompt in one paragraph
+
+---
+
+does it autofind the best timeout period? or should I using punch_tune
+
+---
+
+is there a way we can tune the sensitivity in the final model without having to retrain a random forest model?
+
+---
+
+yes
+
+---
+
+im reconnected, continue
+
+---
+
+Ok, restate the updated training instructios
+
+---
+
+Can i set the timeout to ANYTHING other than 350? make it so i can just type in a command into the terminal to set the time out
+
+---
+
+is one of the settings threshold acceleratio?
+
+---
+
+Can you explain what all the setting mean
+
+---
+
+what does --person andre mean in the command?
+
+---
+
+dont make it start so early, wait for it to calibrate first, and then make it have another butter, say "." pressed in order to start the test, and the same button pressed to pause the test at anytime. Also the calibration notification shows up underneath the acceleration graph so you cant see it, so move it to the very botto mof the screen. If you could also make it work full screen that would be better
+
+---
+
+I changed punch_config, but change it back to default of 2.5 and 350ms
