@@ -159,7 +159,8 @@ def main(argv=None):
     joblib.dump({"model": forest, "features": used, "labels": list(forest.classes_), "feature_set": args.features,
                  "segment": config["segment"].to_dict(), "camera_lag_s": config["camera_lag_s"],
                  "min_confidence": config["min_confidence"], "trained_at": time.strftime("%Y-%m-%d %H:%M"),
-                 "counts": dict(counts), "cv_accuracy": summary[args.features]["accuracy"]}, args.out)
+                 "counts": {str(k): int(v) for k, v in counts.items()},
+                 "cv_accuracy": summary[args.features]["accuracy"]}, args.out)
     print(f"saved {args.out}")
     return 0
 

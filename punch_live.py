@@ -12,6 +12,13 @@ it is unsure about, presses nothing.
 Hotkeys work from any window: F7 calibrate (5 s countdown to get into guard; needed for duck and slip), F8 key output
 on or off (with --live it starts OFF), F9 quit.
 
+Sensitivity, with no retraining:
+  F5 / F6           confidence cutoff down / up by 5 points while playing (shown on screen). Lower = presses
+                    more keys, including more wrong ones. Higher = fewer wrong keys, more missed punches.
+  --confidence 0.7  start at this cutoff (otherwise min_confidence in punch_config.json, default 0.6)
+  --start-g 3       how hard a movement must be to count as a punch at all (the model was trained at
+                    its own value, usually 2.5 g). Small changes are fine; for big ones, retrain.
+
 The key is pressed when the punch ENDS (it stops, or the timeout runs out), because the model needs
 the whole punch. A shorter timeout in punch_tune.py means less delay, then retrain.
 """
@@ -19,7 +26,10 @@ import argparse
 import os
 import time
 
+import punch_segment
 import punch_session as ps
+
+VK_F5, VK_F6 = 0x74, 0x75
 
 GREEN, ORANGE, GREY, YELLOW = (0, 220, 0), (0, 150, 255), (190, 190, 190), (0, 255, 255)
 
@@ -83,6 +93,13 @@ class LivePlay:
             ps.put(frame, self.shown, top + 40, self.shown_colour, 1.0, thick=3)
         ps.put(frame, f"key output {'ON' if self.game.enabled else 'OFF (F8)'}  |  F7 calibrate  F9 quit",
                frame.shape[0] - 40, YELLOW if self.game.enabled else GREY, 0.5)
+        ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  (F5 looser, F6 stricter)"
+               f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - 65, GREY, 0.5)
+
+    def adjust_confidence(self, step):
+        self.clf.min_confidence = round(min(0.95, max(0.35, self.clf.min_confidence + step)), 2)
+        self.show(f"confidence cutoff {100 * self.clf.min_confidence:.0f}%", YELLOW)
+        self.log(f"confidence cutoff now {100 * self.clf.min_confidence:.0f}%")
 
 
 def main():
@@ -94,16 +111,26 @@ def main():
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
+    parser.add_argument("--confidence", type=float, help="how sure the model must be to press a key, 0 to 1 "
+                        "(default: min_confidence in punch_config.json)")
+    parser.add_argument("--start-g", type=float, help="how hard a movement must be to count as a punch, in g "
+                        "(default: what the model was trained with)")
     args = parser.parse_args()
 
     if not ps.Classifier.exists(args.model):
         print(f"No model at {args.model}. Record with punch_capture.py, then run punch_train.py.")
         return 1
-    clf = ps.Classifier(args.model)
+    clf = ps.Classifier(args.model, args.confidence)
     current = ps.load_config()["segment"]
     if current.to_dict() != clf.segment.to_dict():
         print("Note: punch_config.json differs from the settings the model was trained with. Using the model's"
               " settings; retrain to use the new ones.")
+    if args.start_g is not None:
+        trained = clf.segment.start_g
+        clf.segment = punch_segment.SegmentSettings.from_dict({**clf.segment.to_dict(), "start_g": args.start_g})
+        if abs(args.start_g - trained) > 1.0:
+            print(f"Warning: start {args.start_g:g} g is far from the {trained:g} g the model was trained with, so it "
+                  "may be less accurate. Retrain with this value for best results.")
 
     import controller
     import game_input
@@ -119,10 +146,15 @@ def main():
     callbacks = controller.make_callbacks(game, controller.Hotkeys(), detector=False)
     callbacks.pop("on_punch")
     hotkey_frame = callbacks["on_frame"]
-    started = time.time()
+    sensitivity_keys = controller.Hotkeys()
+    started_confidence, started = clf.min_confidence, time.time()
 
     def on_frame():
         play.poll()
+        if sensitivity_keys.pressed(VK_F5):
+            play.adjust_confidence(-0.05)
+        if sensitivity_keys.pressed(VK_F6):
+            play.adjust_confidence(+0.05)
         return hotkey_frame() or bool(args.max_seconds and time.time() - started > args.max_seconds)
 
     callbacks.update(sensors.pose_callbacks())
@@ -130,7 +162,8 @@ def main():
 
     print(f"Model trained {clf.info['trained_at']} on {clf.info['counts']}, "
           f"cross-validated accuracy {100 * clf.info['cv_accuracy']:.0f}%.")
-    print(f"Timeout {1000 * clf.segment.timeout_s:.0f} ms. Keys: {mapping.taps}")
+    print(f"Timeout {1000 * clf.segment.timeout_s:.0f} ms, start {clf.segment.start_g:g} g, "
+          f"confidence cutoff {100 * clf.min_confidence:.0f}% (F5/F6 to change). Keys: {mapping.taps}")
     print("LIVE: keys go to the focused window." if args.live else "Dry run: nothing is pressed.")
     print(f"Key output is {'ON' if game.enabled else 'OFF'}. F7 calibrates, F8 toggles output, F9 quits.")
     import pose_tracker
@@ -139,6 +172,9 @@ def main():
     finally:
         game.close()
         sensors.close()
+    if clf.min_confidence != started_confidence:
+        print(f"Confidence cutoff ended at {100 * clf.min_confidence:.0f}%. To start there next time, use "
+              f"--confidence {clf.min_confidence:g}, or set min_confidence to {clf.min_confidence:g} in punch_config.json.")
     return 0
 
 

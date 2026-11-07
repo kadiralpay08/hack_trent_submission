@@ -142,6 +142,17 @@ class TrainEndToEnd(unittest.TestCase):
             label, conf = clf.classify({"t": rec["t"], "accel": rec["accel"], "gyro": rec["gyro"]}, None, seg)
             self.assertEqual(label, "HOOK")
             self.assertGreater(conf, 0.5)
+            # the confidence cutoff is not fixed by training: it comes from the caller or punch_config.json
+            self.assertEqual(punch_session.Classifier(model, 0.8).min_confidence, 0.8)
+            self.assertEqual(punch_session.Classifier(model).min_confidence, punch_session.load_config()["min_confidence"])
+            import punch_live
+            play = punch_live.LivePlay(None, punch_session.Classifier(model, 0.9), None, log=lambda *a: None)
+            for _ in range(5):
+                play.adjust_confidence(+0.05)
+            self.assertEqual(play.clf.min_confidence, 0.95)
+            for _ in range(20):
+                play.adjust_confidence(-0.05)
+            self.assertEqual(play.clf.min_confidence, 0.35)
 
 
 class TimedTest(unittest.TestCase):
