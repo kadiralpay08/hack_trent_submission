@@ -5,3 +5,4 @@ models/
 firmware/glove_imu/config.h
 tuning_data/
 punch_data/
+firmware/*/build/
