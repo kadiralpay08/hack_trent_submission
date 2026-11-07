@@ -1,0 +1,13 @@
+Where did you get up to?
+
+---
+
+fuck kadirs memory, the glove should decide using both, this is kind of the master plan that i sent you in that giant prompt, i want you to git pull rn and go through the code again and then follow my master prompt i sent
+
+---
+
+have punch_tune also have a model where it asks you to do a given number of punches (say 10) in a given amount of time (say 1 minute) and after the minute is over, see how many it classified with that specific timeout
+
+---
+
+wdym cant reach the api server?

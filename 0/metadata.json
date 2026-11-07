@@ -1,0 +1,81 @@
+{
+  "cli_version": "0.13.1",
+  "checkpoint_id": "01M6TVRJZYBYM4QQHD2C9C429P",
+  "session_id": "dc26e6a1-c62f-47c2-89e2-b1ac6a6ea252",
+  "strategy": "manual-commit",
+  "created_at": "2026-11-07T11:19:40.7516985Z",
+  "branch": "andre/punch-classifier",
+  "checkpoints_count": 3,
+  "save_step_count": 1,
+  "files_touched": [
+    "firmware/glove_imu/glove_imu.ino",
+    "glove_receiver.py",
+    "punch_live.py",
+    "punch_session.py",
+    "punch_tune.py"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "8e4da277750f",
+  "checkpoint_transcript_start": 490,
+  "transcript_lines_at_start": 490,
+  "compact_transcript_start": 60,
+  "token_usage": {
+    "input_tokens": 76,
+    "cache_creation_tokens": 351413,
+    "cache_read_tokens": 12631278,
+    "output_tokens": 71265,
+    "api_call_count": 40
+  },
+  "redaction": {
+    "replacements": 13,
+    "layers": {
+      "betterleaks": 0,
+      "connection_string": 0,
+      "credential_key": 0,
+      "credential_value": 0,
+      "credentialed_uri": 0,
+      "entropy": 0,
+      "key_context": 13,
+      "provider_token": 0,
+      "shell_stdin": 0
+    }
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_014W47L8aM3JpHoerk38N7Be",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "update-config"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "6a2ca8e0a8af",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 373,
+        "end": 374,
+        "entry_ids": [
+          "18490e94-43d0-4b01-ac51-2b293a017e56"
+        ],
+        "tool_use_id": "toolu_014W47L8aM3JpHoerk38N7Be"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_014W47L8aM3JpHoerk38N7Be"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: update-config",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 13
+  }
+}
