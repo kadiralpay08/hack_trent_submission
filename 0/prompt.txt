@@ -1,0 +1,61 @@
+Do i need to connect the esp32 and my laptop to my hotspot now?
+
+---
+
+Ok ive connected the esp32 cam with the writing board attached through a usb port, remember, its not actively connected to the circuit when i write, i have to write, remove it from the writer, and then plug it into the breadboard.
+
+---
+
+do i need to click the reset pin before removing it from the programmer?
+
+---
+
+its on the braedboard and powered
+
+---
+
+the laptop we're using is this current one right now
+
+---
+
+i dont see the python file running here?
+
+---
+
+esp32 wasnt properly wired to 5v and ground, it is now, try ow
+
+---
+
+wait, i forgot to press the button, run it again
+
+---
+
+check now
+
+---
+
+check now
+
+---
+
+what jumper are you talking about
+
+---
+
+i didnt inclue this bs jumper, check again, ive made the cables diagonal
+
+---
+
+wait i forgot to press again, run it once mroe
+
+---
+
+im doing the 350ms one, and theyre all timing out, but i can see on the graph it displays the big acceleration spike and then drop way before the yellow bar that shows the time out, why is this happening?
+
+---
+
+make the calibration wait 5 seconds before calibrating and uplaod that as a deisgn rule to the enitre brain
+
+---
+
+ok can you push the code to the repo
