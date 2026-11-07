@@ -4,9 +4,10 @@
   python controller.py --live   really presses keys in whichever window has focus
 
 Hotkeys work from any window, so you can click the game and still control this:
+  F7  calibrate or recalibrate (stand in your guard first; you hear a beep when it worked)
   F8  turn key output on or off (with --live it starts OFF, so nothing is typed by accident)
   F9  quit
-In the camera window: c = calibrate (stand in guard), a/d = rotate the 3D view, q = quit.
+In the camera window: c = calibrate, a/d = rotate the 3D view, q = quit.
 """
 import argparse
 import ctypes
@@ -15,7 +16,13 @@ import sys
 
 import game_input
 
-VK_F8, VK_F9 = 0x77, 0x78
+VK_F7, VK_F8, VK_F9 = 0x76, 0x77, 0x78
+
+
+def beep():
+    """A short system sound, so you know something happened while you are looking at the game."""
+    if sys.platform == "win32":
+        ctypes.windll.user32.MessageBeep(0)
 
 
 def key_is_down(vk):
@@ -38,8 +45,10 @@ class Hotkeys:
         return fired
 
 
-def make_callbacks(game, hotkeys, log=print, glove=None):
-    """Build the three functions pose_tracker.main() calls. Kept separate so it can be tested.
+def make_callbacks(game, hotkeys, log=print, glove=None, sound=beep):
+    """Build the callbacks for pose_tracker.main(), as a dict of keyword arguments.
+
+    Kept separate from main() so it can be tested without a camera.
 
     glove is an optional glove_punch.GlovePunches. When given, a camera punch only counts if that
     hand's glove also felt one. A hand with no glove connected is never blocked.
@@ -74,7 +83,15 @@ def make_callbacks(game, hotkeys, log=print, glove=None):
             log("key output " + ("ON" if game.enabled else "OFF"))
         return hotkeys.pressed(VK_F9)
 
-    return on_punch, on_states, on_frame
+    def want_calibrate():
+        return hotkeys.pressed(VK_F7)
+
+    def on_calibrated():
+        log("calibrated")
+        sound()
+
+    return dict(on_punch=on_punch, on_states=on_states, on_frame=on_frame,
+                want_calibrate=want_calibrate, on_calibrated=on_calibrated)
 
 
 def main():
@@ -94,8 +111,8 @@ def main():
 
     print(f"Game: {mapping.game}")
     print("LIVE: keys go to the focused window." if args.live else "Dry run: nothing is pressed.")
-    print(f"Key output is {'ON' if game.enabled else 'OFF'}. F8 toggles it, F9 quits.")
-    print("Stand in your guard in front of the camera and press c in the camera window to calibrate.")
+    print(f"Key output is {'ON' if game.enabled else 'OFF'}. F7 calibrates, F8 toggles output, F9 quits.")
+    print("Stand in your guard in front of the camera and press F7 to calibrate (any time, from any window).")
 
     glove = None
     if args.glove or args.simulate_glove:
@@ -109,9 +126,9 @@ def main():
         print("Glove: listening on UDP port 5005. Camera punches need a matching glove punch.")
 
     import pose_tracker  # imported here so the rest of this file works without OpenCV or MediaPipe
-    on_punch, on_states, on_frame = make_callbacks(game, Hotkeys(), glove=glove)
+    callbacks = make_callbacks(game, Hotkeys(), glove=glove)
     try:
-        pose_tracker.main(on_punch=on_punch, on_states=on_states, on_frame=on_frame)
+        pose_tracker.main(**callbacks)
     finally:
         game.close()  # lets go of every key
 
