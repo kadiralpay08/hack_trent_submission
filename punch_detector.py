@@ -11,9 +11,18 @@ How it differs from the check built into pose_tracker.py, which looks at one fra
     Those bursts match no punch, so they are ignored and do not stop the real punch that follows.
   - One punch locks that hand out briefly, so the swing back to guard is not counted as another punch.
   - Raising both hands to guard at once looks like two uppercuts. It is ignored.
-  - Straight punches (jab, cross) are not detected. A webcam facing you cannot see an arm extending
-    straight toward it: in recorded sessions the arm moved only 0.1 shoulder-widths and its speed was
-    no higher than the camera's own jitter. Set straight_ext to try anyway.
+  - Straight punches (jab, cross) are not detected by default. A webcam facing you cannot see an arm
+    extending straight toward it: in recorded sessions the arm moved only 0.1 shoulder-widths and its
+    speed was no higher than the camera's own jitter. Two settings try anyway, for a camera that sees the
+    boxer at an angle (the angled_camera variant uses both):
+      straight_ext: a burst whose arm extension is large enough is a straight punch.
+      straight_max_up: a burst that starts from the guard (hand not low) and barely rises is a straight
+        punch. A hook or uppercut starts low and sweeps up, so rising is what tells them apart.
+  - far_hand_hold: with the boxer turned to the camera, the far hand is partly hidden by the near arm,
+    and its landmark jumps whenever the near arm punches. That jump looks like a punch from the far
+    hand. A far-hand burst that overlaps a near-hand burst (or starts within this many seconds after
+    one) is dropped. Cost: a far-hand punch thrown while the near hand is still moving fast, such as
+    a cross straight after a jab, is dropped too. The near hand is the lead hand.
 
 The numbers are shoulder-widths and seconds, taken from a recorded session. Tune with tune_punches.py
 and replay_punches.py.
@@ -33,6 +42,9 @@ class Settings:
     min_up: float = 0.8         # uppercut: upward travel, with the hand low at some point in the burst
     guard_raise_up: float = 0.35  # the other hand rising at least this much means both are raising guard
     straight_ext: float = None  # jab/cross: arm extension needed; None = off (see module docstring)
+    straight_max_up: float = None    # jab/cross: from the guard, rising no more than this; None = off
+    straight_min_travel: float = 0.9  # ...and moving at least this far, forward or sideways (used with straight_max_up)
+    far_hand_hold: float = None      # seconds after a near-hand burst in which a far-hand burst is dropped; None = off
     early: bool = True          # fire as soon as the motion is clearly a hook or uppercut, not at the peak
     early_inward: float = 1.2   # ...hook: sideways travel needed to be sure
     early_up: float = 1.2       # ...uppercut: upward travel needed to be sure
@@ -69,9 +81,13 @@ class PunchDetector:
         self.s = settings or Settings()
         self.hands = {"L": _Hand("L"), "R": _Hand("R")}
         self.latency_log = []  # (side, kind, seconds from the hand going fast to the decision)
+        self.near_fast_at = -1e9  # when the near (lead) hand was last moving fast
+        self.dropped = []  # (time, side) far-hand bursts dropped as echoes of a near-hand burst, for tuning
 
     def update(self, now, speeds, travel, from_low):
         """speeds = [left, right]; travel = 2x3 (extension, right, up) per hand; from_low = [left, right]."""
+        if speeds[0 if self.s.lead == "L" else 1] > self.s.start_speed:
+            self.near_fast_at = now
         decided = []
         for i, side in enumerate("LR"):
             kind = self._step(self.hands[side], now, speeds[i], travel[i], from_low[i])
@@ -107,11 +123,25 @@ class PunchDetector:
             if speed > s.drop_ratio * h.peak and now - h.began < s.max_wait:
                 return None  # still speeding up
             kind = self._classify(h)
+        if kind is not None and self._echo_of_near_hand(h):
+            self.dropped.append((now, h.side))
+            kind = None  # not a punch, so no lockout: a real punch from this hand can follow
         if kind is not None:
             h.last_fire, h.armed = now, False  # only a real punch locks the hand out
             self.latency_log.append((h.side, kind, now - h.began))
         h.reset()
         return kind
+
+    def _echo_of_near_hand(self, h):
+        """True for a far-hand burst that overlaps, or closely follows, a near-hand burst (see far_hand_hold)."""
+        s = self.s
+        return s.far_hand_hold is not None and h.side != s.lead and self.near_fast_at >= h.began - s.far_hand_hold
+
+    def _straight_from_guard(self, h):
+        """A burst from the guard that barely rises and clearly travels: a jab or cross (see straight_max_up)."""
+        s = self.s
+        return (s.straight_max_up is not None and not h.low and h.up <= s.straight_max_up
+                and max(h.ext, h.inward) >= s.straight_min_travel)
 
     def _classify_early(self, h):
         """A hook or uppercut that is already unmistakable, so there is no need to wait for the peak."""
@@ -120,6 +150,8 @@ class PunchDetector:
         if up >= s.early_up and up >= s.early_ratio * h.inward:
             return "UPPERCUT"
         if h.inward >= s.early_inward and h.inward >= s.early_ratio * max(up, h.ext):
+            if s.straight_max_up is not None and not h.low and h.up <= s.straight_max_up:
+                return None  # sideways travel from the guard with no rise may be a straight punch: wait for the whole burst
             return "HOOK"
         return None
 
@@ -127,6 +159,8 @@ class PunchDetector:
         s = self.s
         if h.low and h.up >= s.min_up and h.up >= h.inward:
             return "UPPERCUT"
+        if self._straight_from_guard(h):
+            return "JAB" if h.side == s.lead else "CROSS"
         if h.inward >= s.min_inward and h.inward >= h.ext:
             return "HOOK"
         if s.straight_ext is not None and h.ext >= s.straight_ext:

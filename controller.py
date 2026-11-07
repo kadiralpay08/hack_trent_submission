@@ -4,10 +4,10 @@
   python controller.py --live   really presses keys in whichever window has focus
 
 Hotkeys work from any window, so you can click the game and still control this:
-  F7  calibrate or recalibrate (stand in your guard first; you hear a beep when it worked)
+  F7  calibrate or recalibrate (press it, then get in guard: it counts down 5 s, then you hear a beep)
   F8  turn key output on or off (with --live it starts OFF, so nothing is typed by accident)
   F9  quit
-In the camera window: c = calibrate, a/d = rotate the 3D view, q = quit.
+In the camera window: c = calibrate (same 5 s countdown), a/d = rotate the 3D view, q = quit.
 """
 import argparse
 import ctypes

@@ -63,7 +63,7 @@ python pose_tracker.py
 
 | Key | Action |
 |---|---|
-| `c` | Calibrate while standing in guard, which is needed for duck and slip detection |
+| `c` | Calibrate, which is needed for duck and slip detection. Press it, then get in guard: it counts down 5 seconds (set `CALIBRATE_DELAY` at the top of the file) and calibrates at zero. Pressing again restarts the count. |
 | `a` / `d` | Rotate the 3D view |
 | `q` | Quit |
 
@@ -87,13 +87,15 @@ python play.py                        # list the variants
 python play.py angled_camera          # dry run: prints the keys it would press
 python play.py angled_camera --live   # presses keys in whichever window has focus
 ```
+
+If `python` says `No module named cv2`, your terminal is using a different Python from the project's. Use `.\play.bat` instead (`.\play.bat --live` to press keys). It runs the same thing with the project's `.venv` and needs no activation.
 | Key | Action |
 |---|---|
-| `F7` | Calibrate or recalibrate, from any window. Stand in guard first. |
+| `F7` | Calibrate or recalibrate, from any window. Press it, then get in guard: it counts down 5 seconds, then beeps when it worked. |
 | `F8` | Turn key output on or off. A live run starts off. |
 | `F9` | Quit |
 
-The tuning tools take the same `--variant` option: `python tune_punches.py --variant angled_camera` records a guided punching session, and `python replay_punches.py --variant angled_camera` scores the variant's settings on it, with no camera needed.
+The tuning tools take the same `--variant` option: `python tune_punches.py --variant angled_camera` records a guided punching session, and `python replay_punches.py --variant angled_camera` scores the variant's settings on it, with no camera needed. `tune.bat` does both in one go and needs no virtual environment to be activated. The recording screen fills the display and uses large text, so you can read it from across the room, and the recording waits until you are standing at the right angle.
 ## Firmware
 
 The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the ESP32 board package (core 3.x). Each sketch lists its wiring at the top of the file.
@@ -110,6 +112,9 @@ The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the
 | File | What it does |
 |---|---|
 | `requirements.txt` | Python packages for all three scripts. |
+| `tune.bat` | Records a tuning session for a variant (default `angled_camera`) and scores it, using `.venv` without activating it. |
+| `play.bat` | Runs `play.py` (default variant `angled_camera`, dry run unless you add `--live`) using `.venv` without activating it. |
+| `overlay.py` | Drawing helpers for the large, high-contrast on-screen text used while recording. |
 | `.gitignore` | Keeps `.venv/`, `models/`, `__pycache__/`, `config.h` and local Claude settings out of git. |
 | `CLAUDE.md`, `AGENTS.md` | Point coding agents to the Entire guide below. |
 | `.entire/agent-guide.md` | Tells coding agents how to use Entire's Graph and Brain tools in this repo. |
@@ -117,3 +122,28 @@ The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the
 | `.entire/.gitignore` | Keeps Entire's local logs, metadata and temporary files out of git. |
 | `.claude/settings.json` | Claude Code hooks that connect sessions and edits to Entire. |
 | `.brainignore` | Keeps local Claude settings out of Entire's Brain index. |
+
+## How we use Entire
+
+| Part | How we use it |
+|---|---|
+| Sessions | Entire captures Claude Code sessions only (`entire status` lists that one agent). Kiro is not a supported agent, so Kiro sessions are not captured. At the end of a Kiro session we save what was decided and what is left to do as a Brain memory instead, for example the handoff for `kadir/variants`. |
+| Graph | Agents find code with `entire graph query` instead of searching files. Measurements are below. |
+| Brain | Decisions, gotchas and team rules are saved with `entire brain remember`, and agents read them with `entire brain brief` and `entire brain recall` before they change anything. The memories are shared across the team. |
+| Trails | Not used yet. Changes go in through GitHub pull requests. |
+
+### Graph output size
+
+Each row is one question asked with `entire graph query --repo . --profile full --head --format agent --max-context-bytes 4096`. The last two columns show what an agent would read without Graph: the top-ranked file, or every file Graph points to. Measured on 7 November 2026 with Entire CLI 0.13.1 on commit `a7bc7f9`. File sizes are from the working tree.
+
+| Question | Graph output | Top-ranked file | All files Graph points to |
+|---|---|---|---|
+| Where are punch detection settings loaded for a variant | 3,973 B | `variants/base.py` 4,968 B | 5 files, 56,080 B |
+| How does the glove confirm a camera punch | 4,036 B | `glove_punch.py` 4,309 B | 6 files, 60,961 B |
+| Where are keyboard keys pressed for a punch | 4,068 B | `game_input.py` 9,743 B | 6 files, 56,000 B |
+| How is the body angle measured for the angled camera | 4,137 B | `variants/angled_camera/__init__.py` 8,745 B | 6 files, 74,321 B |
+| Where is the recalibrate hotkey handled | 3,880 B | `glove_check.py` 12,852 B | 5 files, 49,033 B |
+
+A Graph answer is about 4 KB, which is roughly 1,000 tokens at 4 bytes per token (an estimate, not a billed count). For the last question, a plain search for "recalibrat" finds `controller.py` and `pose_tracker.py`, which are 21,470 B to read in full.
+
+These numbers measure output size only. They don't check that the answer is right: for the hotkey question the correct file, `controller.py`, was ranked third. We have not yet compared the tokens an agent uses over a whole task with and without Graph.

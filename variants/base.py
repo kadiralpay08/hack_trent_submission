@@ -43,19 +43,34 @@ class Variant:
             return punch_detector.Settings.from_dict(json.load(f))
 
     # --- hooks a variant can use to add its own behaviour to the camera loop ---
-    def extra_callbacks(self, args, text_y=95):
+    def extra_callbacks(self, args, text_y=95, large=False):
         """Extra keyword arguments for pose_tracker.main (on_pose, on_draw, ...). Default: none.
 
         text_y is the screen row where this variant may draw its own text, so it stays clear of
         whatever else is on the camera window (the tuning recorder puts a banner at the top).
+        large=True means the boxer is reading the screen from across the room (the tuning recorder),
+        so draw big and simple.
         """
         return {}
 
+    def tuning_position(self):
+        """None if this variant needs the boxer in no particular place. Otherwise True while the boxer is
+        standing where the recording needs them, and False when not. The recorder waits for it."""
+        return None
+
+    def tuning_started(self):
+        """Called once, when the recording itself begins (after the boxer was in position)."""
+
     tuning_short = "Hands up in guard. Head and both hands in view."  # shown on the recording screen (60 characters)
+    tuning_straight = "punch straight at the camera"  # how the jab and cross prompts end
 
     def tuning_prompt(self):
         """Longer instructions, printed in the console before a tuning session."""
         return "Stand where you will play, hands up in guard, head and both hands in view."
+
+    def play_prompt(self):
+        """Instructions printed in the console before playing. Default: the same as for tuning."""
+        return self.tuning_prompt()
 
     def session_note(self):
         """A line describing the conditions of the session just recorded, saved beside it. Default: none."""
@@ -91,7 +106,7 @@ class Variant:
         print(f"Game: {mapping.game}")
         print("LIVE: keys go to the focused window." if args.live else "Dry run: nothing is pressed.")
         print(f"Key output is {'ON' if game.enabled else 'OFF'}. F7 calibrates, F8 toggles output, F9 quits.")
-        print(self.tuning_prompt())
+        print(self.play_prompt())
         try:
             pose_tracker.main(**callbacks)
         finally:

@@ -4,7 +4,7 @@
   python play.py angled_camera            dry run: prints the keys it would press, presses nothing
   python play.py angled_camera --live     really press keys in whichever window has focus
 
-Hotkeys work from any window: F7 calibrate, F8 key output on or off (live starts off), F9 quit.
+Hotkeys work from any window: F7 calibrate (press it, then get in guard: it counts down 5 s), F8 key output on or off (live starts off), F9 quit.
 Each variant keeps its own settings, so choosing one never changes another. See variants/__init__.py
 for how to add a variant.
 """
