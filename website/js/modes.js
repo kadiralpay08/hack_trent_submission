@@ -6,20 +6,20 @@ export const MODES = {
   angled_camera: {
     id: 'angled_camera',
     title: 'One camera at 45°',
-    badge: 'Ready',
-    summary: 'One webcam, you turned about 45° to it, lead shoulder forward. Straight punches move across the picture, so jabs and crosses are seen too.',
+    badge: 'Shelved',
+    summary: 'One webcam, you turned about 45° to it. Set aside by the team in favour of the glove: hooks were too often read as crosses or uppercuts. The code is kept in archive/angled_camera.',
     needs: 'Webcam 1.5 to 2 m away, aimed at your upper body.',
     detects: 'Jab, cross, hook, uppercut',
     settingsUrl: 'settings/angled_camera.json',
     angleGuide: true,
     glove: false,
-    available: true,
+    available: false,  // to bring it back: set this to true and the badge to 'Ready' (see archive/angled_camera/README.md)
   },
   front_glove: {
     id: 'front_glove',
     title: 'Front camera + glove',
     badge: 'Needs glove',
-    summary: 'Webcam in front of you, plus a glove with a motion sensor. The camera picks the punch and the glove confirms the hand really punched.',
+    summary: 'Webcam in front of you, plus a glove with a motion sensor. The camera picks the punch and the glove confirms the hand really punched. This is the earlier rule-based version (controller.py --glove). The trained model used by play.bat is not in the website yet.',
     needs: 'The key bridge running with --glove, and the glove sending to this laptop.',
     detects: 'Hook, uppercut (a webcam facing you cannot see straight punches)',
     settingsUrl: null,  // the detector defaults, as controller.py uses them

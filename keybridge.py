@@ -237,6 +237,8 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             length = int(self.headers.get("Content-Length") or 0)
+            if length < 0:  # read(-1) would wait for the client to hang up
+                return self.send_error(400)
             if length > 4096:
                 return self.send_error(413)
             body = json.loads(self.rfile.read(length) or b"{}")

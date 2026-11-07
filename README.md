@@ -13,6 +13,8 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch e
 | 4. Train | `python punch_train.py` | Trains the random forest and reports glove-only, camera-only and combined accuracy. Saves `models/punch_rf.joblib` |
 | 5. Play | `python punch_live.py --live` | J jab, H hook, U uppercut, plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit |
 
+On a machine where `python` is not the project's Python, you get `No module named cv2`. Put `.\run.bat` in front instead, for example `.\run.bat punch_capture.py` or `.\run.bat punch_train.py`. It runs the script with the project's `.venv` and needs no activation. For step 5, `.\play.bat` is the same as `punch_live.py` (dry run), and `.\play.bat --live` presses keys.
+
 Every tool except training takes `--simulate`, which uses a fake glove so you can try it without hardware. Run the tests with `python -m unittest discover tests`. The supporting modules are `punch_segment.py` (finds where punches start and end), `punch_features.py` (turns a punch into model inputs), `punch_session.py` (shared buffers, settings and data files) and `punch_sim.py` (fake glove data, for testing only). Shared settings live in `punch_config.json`.
 
 The other scripts below came earlier and still work: Kadir's rule-based camera controller, and the wired Uno tracker.
@@ -94,22 +96,29 @@ python glove_receiver.py --simulate  # fake a glove, with no hardware needed
 
 To tell two gloves apart, add their IP addresses to `GLOVE_BY_IP`. Any glove not listed is treated as `L`. If the sensor is mounted at an angle, set `AXIS_MAP` and `AXIS_SIGN`.
 
-### `play.py`
-Plays a boxing game with your body, using one of the product variants we are testing. `python play.py` lists them. Each variant has its own settings and its own recorded tuning sessions, so choosing one never changes another. Adding a variant means adding a folder, with no other file edited. See `variants/README.md` for the three versions, how to try the 45 degree camera, and how to add a variant.
-```powershell
-python play.py                        # list the variants
-python play.py angled_camera          # dry run: prints the keys it would press
-python play.py angled_camera --live   # presses keys in whichever window has focus
-```
+### `play.py`, `tune_punches.py` and `replay_punches.py` (the variant framework)
 
-If `python` says `No module named cv2`, your terminal is using a different Python from the project's. Use `.\play.bat` instead (`.\play.bat --live` to press keys). It runs the same thing with the project's `.venv` and needs no activation.
+An earlier way of trying different product versions: each one is a folder in `variants/` with its own settings and its own recorded tuning sessions, found automatically. **No variant is active now.** The 45 degree camera was one, and it is shelved in `archive/angled_camera/` (its README explains why and how to bring it back). The main path is the glove pipeline above, so `python play.py` currently reports that it found no variants. The framework stays for trying a future version; `variants/README.md` explains how to add one.
+
+`tune_punches.py` records a guided camera-only punching session and `replay_punches.py` scores the camera rules on it with no camera needed. Both work without `--variant` for the front camera alone.
+
+The hotkeys below are shared by `punch_live.py`, `controller.py` and `play.py`:
+
 | Key | Action |
 |---|---|
 | `F7` | Calibrate or recalibrate, from any window. Press it, then get in guard: it counts down 5 seconds, then beeps when it worked. |
 | `F8` | Turn key output on or off. A live run starts off. |
 | `F9` | Quit |
 
-The tuning tools take the same `--variant` option: `python tune_punches.py --variant angled_camera` records a guided punching session, and `python replay_punches.py --variant angled_camera` scores the variant's settings on it, with no camera needed. `tune.bat` does both in one go and needs no virtual environment to be activated. The recording screen fills the display and uses large text, so you can read it from across the room, and the recording waits until you are standing at the right angle.
+### `keybridge.py` and `website/`
+
+A web page that tracks you with the webcam and plays a built-in sparring game, plus a small local program that turns the page's punches into real key presses for Browser Boxing. See `website/README.md`. Its glove mode is the earlier rule-based one (the glove confirms a camera punch), not the trained model.
+
+```powershell
+.\run.bat keybridge.py            # dry run: serves the site, prints keys, presses nothing
+.\run.bat keybridge.py --live     # really presses keys
+```
+
 ## Firmware
 
 The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the ESP32 board package (core 3.x). Each sketch lists its wiring at the top of the file.
@@ -126,10 +135,12 @@ The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the
 | File | What it does |
 |---|---|
 | `requirements.txt` | Python packages for all three scripts. |
-| `tune.bat` | Records a tuning session for a variant (default `angled_camera`) and scores it, using `.venv` without activating it. |
-| `play.bat` | Runs `play.py` (default variant `angled_camera`, dry run unless you add `--live`) using `.venv` without activating it. |
-| `overlay.py` | Drawing helpers for the large, high-contrast on-screen text used while recording. |
-| `.gitignore` | Keeps `.venv/`, `models/`, `__pycache__/`, `config.h` and local Claude settings out of git. |
+| `play.bat` | Plays with the glove and camera (`punch_live.py`): dry run, or `--live` to press keys. Uses `.venv` without activating it. |
+| `run.bat` | Runs any script with the project's `.venv`, for example `.\run.bat punch_capture.py`. Use it when `python` reports `No module named cv2`. |
+| `overlay.py` | Drawing helpers for the large on-screen text used by the recorder and the calibration countdown. |
+| `archive/` | Work that is set aside but kept. `archive/angled_camera/` is the shelved 45 degree camera. |
+| `keybridge.py`, `website/` | The web page and the local program that presses keys for it (see above). |
+| `.gitignore` | Keeps `.venv/`, the root `models/` folder, `__pycache__/`, `config.h`, recorded data and local Claude settings out of git. |
 | `CLAUDE.md`, `AGENTS.md` | Point coding agents to the Entire guide below. |
 | `.entire/agent-guide.md` | Tells coding agents how to use Entire's Graph and Brain tools in this repo. |
 | `.entire/settings.json` | Turns on Entire and sets where it stores session checkpoints. |

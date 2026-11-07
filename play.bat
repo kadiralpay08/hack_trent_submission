@@ -1,19 +1,13 @@
 @echo off
-rem Play with the project's own Python, so there is nothing to activate.
-rem   play.bat                        dry run of the 45 degree camera: prints the keys, presses nothing
-rem   play.bat --live                 same, but really presses keys in the focused window
-rem   play.bat <variant> [--live]     another variant (python play.py lists them)
+rem Play with the glove and the front camera, using the project's own Python (nothing to activate).
+rem   play.bat                  dry run: prints the keys it would press, presses nothing
+rem   play.bat --live           really presses keys in whichever window has focus
+rem   play.bat --simulate       fake glove, to try it with no hardware
+rem This runs punch_live.py. It needs a trained model: record with run.bat punch_capture.py, then run.bat punch_train.py.
 cd /d "%~dp0"
 if not exist ".venv\Scripts\python.exe" goto :novenv
 
-if "%~1"=="" goto :default
-set "FIRST=%~1"
-if "%FIRST:~0,1%"=="-" goto :default
-".venv\Scripts\python.exe" play.py %*
-goto :done
-
-:default
-".venv\Scripts\python.exe" play.py angled_camera %*
+".venv\Scripts\python.exe" punch_live.py %*
 goto :done
 
 :novenv

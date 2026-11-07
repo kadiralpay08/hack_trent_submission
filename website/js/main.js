@@ -22,7 +22,7 @@ const clock = () => performance.now() / 1000;
 const CALIBRATE_DELAY = 5;  // seconds between asking to calibrate and it happening, as in pose_tracker.py
 
 const app = {
-  mode: MODES.angled_camera,
+  mode: MODES.front_glove,
   modeChosen: false,
   lead: 'L',
   settings: makeSettings(),

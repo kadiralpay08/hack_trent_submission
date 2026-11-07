@@ -14,7 +14,7 @@ How it differs from the check built into pose_tracker.py, which looks at one fra
   - Straight punches (jab, cross) are not detected by default. A webcam facing you cannot see an arm
     extending straight toward it: in recorded sessions the arm moved only 0.1 shoulder-widths and its
     speed was no higher than the camera's own jitter. Two settings try anyway, for a camera that sees the
-    boxer at an angle (the angled_camera variant uses both):
+    boxer at an angle (the shelved archive/angled_camera variant used both):
       straight_ext: a burst whose arm extension is large enough is a straight punch.
       straight_max_up: a burst that starts from the guard (hand not low) and barely rises is a straight
         punch. A hook or uppercut starts low and sweeps up, so rising is what tells them apart.

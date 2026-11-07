@@ -23,9 +23,9 @@ To serve the site without the bridge: `python -m http.server 8000` inside this f
 | `js/detect.js` | The punch detection, ported from `pose_tracker.py` and `punch_detector.py`. See "Keeping it in step" below. |
 | `js/pose.js` | Camera, the MediaPipe pose model, and the picture with the skeleton drawn on it. |
 | `js/game.js` | The built-in sparring game and its sounds. |
-| `js/modes.js` | The product variants (45 degree camera, front camera + glove, two cameras). |
+| `js/modes.js` | The ways to play. Front camera + glove is the default. The 45 degree camera is listed as shelved. Two cameras is not built. |
 | `js/bridge.js` | Talks to `keybridge.py`. |
-| `settings/angled_camera.json` | A copy of `variants/angled_camera/settings.json`. |
+| `settings/angled_camera.json` | A copy of `archive/angled_camera/settings.json`, used only if the 45 degree mode is switched back on. |
 | `vendor/` | MediaPipe and the pose model (23 MB), so the site works offline. If it is missing, the site downloads them from a CDN. |
 | `../keybridge.py` | The program that presses real keys. |
 
@@ -39,8 +39,7 @@ The bridge only accepts requests from this computer and from `keyboardwarrior.cl
 
 `js/detect.js` is a line-by-line port, checked against the Python on your recorded tuning sessions (456 punch events across 3 settings) and on 5,400 synthetic frames, with identical results. It does not update itself:
 
-- **Settings:** when you run the bridge, the site reads `variants/<mode>/settings.json` live, so tuning is picked up on reload. The hosted site uses `settings/angled_camera.json`, so copy it before publishing:
-  `Copy-Item variants\angled_camera\settings.json website\settings\angled_camera.json`
+- **Settings:** the default mode (front camera + glove) uses the detector's built-in defaults, so there is nothing to copy. A mode with its own settings file, such as the shelved 45 degree one, reads `variants/<mode>/settings.json` live when the bridge runs, and falls back to its copy in `settings/` on a hosted site.
 - **Detector code:** if the logic in `punch_detector.py` or the frame handling in `pose_tracker.py` changes (not only its settings), the same change has to be made in `js/detect.js`.
 
 ## Publishing on keyboardwarrior.club
@@ -53,6 +52,6 @@ The bridge only accepts requests from this computer and from `keyboardwarrior.cl
 
 - Tracking pauses if this window is hidden or fully covered, because browsers stop animation in covered windows. Keep the camera panel visible, which is why the game opens beside it and not over it.
 - The "Front + side camera" mode is listed but not built, as in `variants/README.md`.
-- Glove mode follows `controller.py --glove`: the glove confirms a camera punch. Straight punches are not detected from a front-on camera. The glove has not been tested with real hardware here, only with the simulated glove.
+- Glove mode follows `controller.py --glove`: the glove confirms a camera punch. It is not the trained random forest model that `play.bat` (`punch_live.py`) uses, so the website and the Python game classify punches differently. Straight punches are not detected from a front-on camera. The glove has not been tested with real hardware here, only with the simulated glove.
 - The real Browser Boxing has not been played with this yet. The key mapping notes in `mappings/browser_boxing.json` still apply (whether guard is held or toggled, and which way a slip moves the boxer).
 - Use casual play or bots in Browser Boxing, never ranked.
