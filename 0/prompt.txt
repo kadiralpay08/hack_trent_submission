@@ -1,0 +1,59 @@
+can you flash the ip address data back on the esp32 and then make it check fi tis sending data over wifi?
+
+---
+
+hello?
+
+---
+
+its in
+
+---
+
+ok flash
+
+---
+
+ok its in
+
+---
+
+ok there was a battery missing now its on
+
+---
+
+ok now lets test it with left and right. the phyphox remote access is at http://172.25.19.247
+
+---
+
+<task-notification>
+<task-id>bpdb0t460</task-id>
+<tool-use-id>toolu_017HAgQV4vb4AcM3m8mgAxEY</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bpdb0t460.output</output-file>
+<status>completed</status>
+<summary>Background command "Run two-arm live classifier in dry-run" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+for the first half i accidently had my phone in my left hand
+
+---
+
+ok can i test out both again
+
+---
+
+Can you updat the training program so that it still trains each arm seperately but it collects data with both arms in orrder, it could tell yiu something like left hook right uppercut, but make surre there is an equal amount of left firsts and right firsts but randomly distributed
+
+---
+
+also make sure its training for nones, we want this to be a one and done data trainer for everything
+
+---
+
+alos all the text showing up on the screen seems to be have made for a small screen and scaled up, make sure the text renders cleeanly, the color grey sucks ass, it has low contrast with eveything, black or yellow, or green or anything else is good
+
+---
+
+make the slip right and left appear beside your torso, and show the keys that are typed up when you slip right or left
