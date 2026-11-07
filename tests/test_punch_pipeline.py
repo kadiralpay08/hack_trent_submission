@@ -173,6 +173,94 @@ class TimedTest(unittest.TestCase):
         self.assertEqual(rows[0][1], 2)
 
 
+class RightGlove(unittest.TestCase):
+    """The second glove: its own frame (with a magnetometer), port, data folder, labels and model."""
+
+    def test_magnetometer_frame_round_trips_beside_old_frames(self):
+        old = glove_receiver.pack_frame(10, [0, 0, 1], [1, 2, 3])
+        new = glove_receiver.pack_frame(12, [0.5, 0, 1], [0, 0, 300], button=True, mag=[20.0, -5.0, 40.0])
+        self.assertEqual((len(old), len(new)), (19, 26))
+        a, b = glove_receiver.parse_frames(b"x" + old + new)
+        self.assertIsNone(a.mag)
+        np.testing.assert_allclose(b.mag, [20, -5, 40], atol=0.1)
+        self.assertTrue(b.mag_ok and b.button)
+        self.assertEqual(b.size, 26)
+        bad = bytearray(new)
+        bad[20] ^= 0xFF
+        self.assertEqual(list(glove_receiver.parse_frames(bytes(bad))), [])
+
+    def test_arms_keep_separate_ports_data_and_models(self):
+        left, right = punch_session.ARMS["left"], punch_session.ARMS["right"]
+        self.assertEqual((left.port, right.port), (5005, 5006))
+        self.assertNotEqual(left.data_dir, right.data_dir)
+        self.assertNotEqual(left.model_path, right.model_path)
+        self.assertEqual(left.data_dir, os.path.join(punch_session.ROOT, "punch_data"))  # the original recordings
+        self.assertEqual(left.model_path, os.path.join(punch_session.ROOT, "models", "punch_rf.joblib"))
+        self.assertEqual(right.labels, ("CROSS", "HOOK", "UPPERCUT"))
+
+    def test_live_rows_with_and_without_magnetometer(self):
+        plain = [(0.0, 0, 0, 0, 1, 0, 0, 0, False, 0, 0, 0, False)] * 3
+        withmag = [(0.0, 0, 0, 0, 1, 0, 0, 0, False, 20, 0, -40, True)] * 3
+        self.assertNotIn("mag", punch_session.imu_arrays(plain))
+        self.assertEqual(punch_session.imu_arrays(withmag)["mag"].shape, (3, 3))
+
+    def test_right_arm_pose_features_are_mirrored(self):
+        # a right hook swings out to the RIGHT first; mirrored, it should look like a left hook does
+        frames = 12
+        world = np.zeros((frames, 33, 3))
+        world[:, 11], world[:, 12] = [0.2, -0.5, 0], [-0.2, -0.5, 0]   # MediaPipe: left shoulder at +x
+        world[:, 14], world[:, 24] = [-0.25, -0.3, -0.1], [-0.1, 0.0, 0]
+        x = np.concatenate([np.linspace(-0.3, -0.55, 4), np.linspace(-0.55, 0.1, 8)])  # out right, then across
+        world[:, 16] = np.stack([x, np.full(frames, -0.4), np.full(frames, -0.3)], axis=1)
+        pose = {"t": np.linspace(0, 0.3, frames), "world": world, "vis": np.ones((frames, 33))}
+        feats = punch_features.pose_features(pose, punch_segment.Segment(start_t=0.0, end_t=0.3), 0.0, side="R")
+        self.assertGreater(feats["pose_out_left"], 0.4)    # "out" first...
+        self.assertGreater(feats["pose_back_right"], 1.0)  # ...then back across, as for the left arm
+
+    def test_right_arm_trains_with_magnetometer_features(self):
+        import punch_train
+        rng = np.random.default_rng(8)
+        with tempfile.TemporaryDirectory() as tmp:
+            data, model = os.path.join(tmp, "right"), os.path.join(tmp, "right.joblib")
+            for kind in punch_session.ARMS["right"].labels:
+                for _ in range(10):
+                    rec = punch_sim.synthetic_recording(kind, rng, mirror=True, magnetometer=True)
+                    imu = {k: rec[k] for k in ("t", "t_us", "accel", "gyro", "mag", "mag_ok")}
+                    imu["button"] = np.zeros(len(rec["t"]), dtype=bool)
+                    meta = {"label": kind, "arm": "right", "press_t": rec["press_t"], "release_t": rec["release_t"],
+                            "session": "s1"}
+                    punch_session.save_block(kind, imu, punch_session.pose_arrays([]), meta, data)
+            block = punch_session.load_block(punch_session.block_paths(data)[0])
+            self.assertIn("mag", block["imu"])
+            config = os.path.join(tmp, "config.json")
+            punch_session.save_config(punch_session.load_config(os.path.join(tmp, "none.json")), config)
+            code = punch_train.main(["--arm", "right", "--data", data, "--out", model, "--config", config,
+                                     "--features", "imu"])
+            self.assertEqual(code, 0)
+            clf = punch_session.Classifier(model)
+            self.assertEqual(clf.side, "R")
+            self.assertTrue(any(n.startswith("imu_mag_") for n in clf.features))
+            rec = punch_sim.synthetic_recording("CROSS", rng, mirror=True, magnetometer=True)
+            seg, _ = block_segment(rec, clf.segment)
+            label, _ = clf.classify({k: rec[k] for k in ("t", "accel", "gyro", "mag", "mag_ok")}, None, seg)
+            self.assertEqual(label, "CROSS")
+
+    def test_one_camera_feeds_both_arms(self):
+        class Buf:
+            def __init__(self):
+                self.got = []
+
+            def pose_callbacks(self):
+                return {"on_pose": lambda w, v: self.got.append("pose"),
+                        "on_features": lambda now, s, t, f: self.got.append(now)}
+        a, b = Buf(), Buf()
+        cb = punch_session.shared_pose_callbacks(a, b)
+        cb["on_pose"](None, None)
+        cb["on_features"](1.5, None, None, None)
+        self.assertEqual(a.got, ["pose", 1.5])
+        self.assertEqual(b.got, ["pose", 1.5])
+
+
 class FakeSensors:
     """Just enough of LiveSensors for the start / pause logic, with no glove or camera."""
 

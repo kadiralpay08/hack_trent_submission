@@ -2,6 +2,12 @@
 
 Frame (19 bytes): A5 5A | uint32 us (little-endian) | ax ay az gx gy gz int16 (big-endian) | XOR of bytes 2-17
 The second byte is 5B instead of 5A while the glove's training button is held (Sample.button).
+
+Frame with a magnetometer (26 bytes, the ESP32-S3 + MPU-9250 glove, firmware/glove_imu_s3):
+  A5 5C (5D while the button is held) | uint32 us | ax ay az gx gy gz | mx my mz (int16, big-endian,
+  AK8963 axes, 0.15 uT per count) | status (bit 0 magnetometer working, bit 1 new reading) | XOR of 2-24
+Both kinds can arrive on any port. The gloves are told apart by port: left 5005, right 5006.
+
 Run directly to print incoming data, or with --simulate to fake a glove for testing.
 """
 import argparse
@@ -18,6 +24,12 @@ PORT = 5005
 SYNC = b"\xA5\x5A"          # button released (and all firmware without a button)
 SYNC_PRESSED = b"\xA5\x5B"  # training button held
 FRAME_LEN = 19
+SYNC_MAG = b"\xA5\x5C"          # a frame with magnetometer readings, button released
+SYNC_MAG_PRESSED = b"\xA5\x5D"  # ...button held
+MAG_FRAME_LEN = 26
+MAG_UT_PER_LSB = 0.15           # AK8963 in 16-bit mode
+# The AK8963's axes differ from the accelerometer's: x and y swap and z flips (MPU-9250 datasheet).
+MAG_TO_ACCEL_AXES, MAG_TO_ACCEL_SIGN = [1, 0, 2], np.array([1, 1, -1])
 
 # Must match the ranges the firmware sets on the MPU.
 ACCEL_LSB_PER_G = 2048.0   # +-16 g; 16384 = +-2 g, 8192 = +-4 g, 4096 = +-8 g
@@ -40,6 +52,9 @@ class Sample:
     t: float = 0.0       # when it was measured, on the laptop clock (time.time()); set by Clock
     dt: float = 0.0      # seconds since the previous sample, from t_us; a dropped packet shows as a big dt
     button: bool = False  # the training button was held when this sample was taken
+    mag: np.ndarray = None  # magnetic field in uT, glove axes (same as accel); None if the glove has none
+    mag_ok: bool = False    # the magnetometer is present and working
+    size: int = FRAME_LEN   # bytes this frame took, for counting junk
 
 
 def checksum(body):
@@ -61,15 +76,35 @@ def parse_frames(data):
             gyro = raw[3:][AXIS_MAP] / GYRO_LSB_PER_DPS * AXIS_SIGN
             yield Sample(t_us, accel, gyro, button=head == SYNC_PRESSED)
             i += FRAME_LEN
+        elif (head in (SYNC_MAG, SYNC_MAG_PRESSED) and i + MAG_FRAME_LEN <= len(data)
+              and checksum(data[i + 2:i + 25]) == data[i + 25]):
+            (t_us,) = struct.unpack_from("<I", data, i + 2)
+            raw = np.array(struct.unpack_from(">9h", data, i + 6), dtype=float)
+            accel = raw[:3][AXIS_MAP] / ACCEL_LSB_PER_G * AXIS_SIGN
+            gyro = raw[3:6][AXIS_MAP] / GYRO_LSB_PER_DPS * AXIS_SIGN
+            mag_sensor = raw[6:][MAG_TO_ACCEL_AXES] * MAG_TO_ACCEL_SIGN * MAG_UT_PER_LSB
+            mag = mag_sensor[AXIS_MAP] * AXIS_SIGN
+            yield Sample(t_us, accel, gyro, button=head == SYNC_MAG_PRESSED, mag=mag,
+                         mag_ok=bool(data[i + 24] & 0x01), size=MAG_FRAME_LEN)
+            i += MAG_FRAME_LEN
         else:
             i += 1  # resync
 
 
-def pack_frame(t_us, accel, gyro, button=False):
-    """Build a frame from accel (g) and gyro (deg/s); used by the simulator and tests."""
+def pack_frame(t_us, accel, gyro, button=False, mag=None, mag_ok=True):
+    """Build a frame from accel (g), gyro (deg/s) and optionally mag (uT, glove axes); for the simulator
+    and tests. With mag it builds the 26-byte magnetometer frame, as the S3 glove sends."""
     counts = np.concatenate([np.asarray(accel) * ACCEL_LSB_PER_G, np.asarray(gyro) * GYRO_LSB_PER_DPS])
-    body = struct.pack("<I", t_us & 0xFFFFFFFF) + struct.pack(">6h", *np.clip(np.round(counts), -32768, 32767).astype(int))
-    return (SYNC_PRESSED if button else SYNC) + body + bytes([checksum(body)])
+    if mag is not None:  # undo the receiver's axis change, back to the AK8963's own axes
+        sensor = np.empty(3)
+        sensor[MAG_TO_ACCEL_AXES] = np.asarray(mag, dtype=float) / MAG_TO_ACCEL_SIGN
+        counts = np.concatenate([counts, sensor / MAG_UT_PER_LSB])
+    ints = np.clip(np.round(counts), -32768, 32767).astype(int)
+    body = struct.pack("<I", t_us & 0xFFFFFFFF) + struct.pack(f">{len(ints)}h", *ints)
+    if mag is None:
+        return (SYNC_PRESSED if button else SYNC) + body + bytes([checksum(body)])
+    body += bytes([0x01 if mag_ok else 0x00])
+    return (SYNC_MAG_PRESSED if button else SYNC_MAG) + body + bytes([checksum(body)])
 
 
 class Clock:

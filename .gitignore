@@ -7,3 +7,6 @@ firmware/glove_imu/config.h
 tuning_data/
 punch_data/_rejected/
 firmware/*/build/
+firmware/*/config.h
+!models/punch_rf_right.joblib
+punch_data_right/_rejected/

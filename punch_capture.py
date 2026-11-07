@@ -21,11 +21,12 @@ Keys that work in any window, no Enter needed:
   F11     full screen on or off (it starts full screen; --windowed starts in a window)
 Type in THIS TERMINAL, then Enter:
   p       pause or resume (prompted mode), the same as "."
-  x       undo the last saved punch (moves it to punch_data/_rejected/)
+  x       undo the last saved punch (moves it to the arm's _rejected/ folder)
   j/h/u   button mode only: switch to JAB / HOOK / UPPERCUT
   q       quit (everything saved so far is kept); q in the camera window also works
 
-The data stays on this computer in punch_data/<LABEL>/ (not committed). Train with python punch_train.py.
+The data stays on this computer in punch_data/<LABEL>/ (or punch_data_right/ with --arm right).
+Train with python punch_train.py (add --arm right for the right arm).
 """
 import argparse
 import os
@@ -38,19 +39,13 @@ import time
 import punch_segment
 import punch_session as ps
 
-HOW = {
-    "JAB": "straight forward",
-    "HOOK": "left, then forward, then right",
-    "UPPERCUT": "arm drops down, then drives up",
-}
 NONE = "NONE"
-KEYS = {"j": "JAB", "h": "HOOK", "u": "UPPERCUT"}
 PRE_S, POST_S = 1.0, 0.3       # data kept before and after each block
 MIN_HOLD_S, MAX_HOLD_S = 0.15, 8.0
 REST_S, GO_S, LATE_S = 1.6, 1.6, 0.6   # prompted: guard, punch window, grace after the window
 FREE_EVERY, FREE_S, ANNOUNCE_S = 15, 15.0, 4.0
 GREEN, RED, ORANGE, GREY, YELLOW = (0, 220, 0), (0, 0, 255), (0, 150, 255), (190, 190, 190), (0, 255, 255)
-TONES = {"JAB": 880, "HOOK": 660, "UPPERCUT": 520, "FREE": 300}
+TONES = {"JAB": 880, "CROSS": 880, "HOOK": 660, "UPPERCUT": 520, "FREE": 300}
 
 
 def beep(kind):
@@ -63,9 +58,12 @@ def beep(kind):
 class Capture:
     """Shared by both modes: counting, saving and checking blocks, undo, and the terminal."""
 
-    def __init__(self, sensors, config, target, root, person):
+    def __init__(self, sensors, config, target, root, person, arm=None):
         self.sensors, self.config, self.target, self.root, self.person = sensors, config, target, root, person
-        self.counts = ps.count_blocks(root)
+        self.arm = arm or ps.ARMS["left"]
+        self.how = self.arm.how
+        self.keys = {label[0].lower(): label for label in self.arm.labels}  # j or c, h, u
+        self.counts = ps.count_blocks(root, self.arm.labels)
         self.counts.setdefault(NONE, 0)
         self.saved = []              # (path, label) saved this session, for undo
         self.session = time.strftime("%Y%m%d_%H%M%S")
@@ -77,7 +75,7 @@ class Capture:
         self.calibrated = True
 
     def remaining(self):
-        return {k: max(0, self.target - self.counts.get(k, 0)) for k in ps.LABELS}
+        return {k: max(0, self.target - self.counts.get(k, 0)) for k in self.arm.labels}
 
     def say(self, text, colour=GREY):
         print(text)
@@ -86,7 +84,7 @@ class Capture:
     def read_terminal(self):
         while not self.quit:
             try:
-                self.command(input().strip().lstrip("﻿").lower())  # ﻿: a byte-order mark
+                self.command(input().strip().lstrip("\ufeff").lower())  # a byte-order mark
             except EOFError:
                 return
 
@@ -123,7 +121,7 @@ class Capture:
                 problem = "no punch found"
             elif segment.reason == "gap":
                 problem = "the glove data had a gap during the punch"
-        meta = {"label": label, "press_t": t0, "release_t": t1, "session": self.session, "person": self.person,
+        meta = {"label": label, "arm": self.arm.name, "press_t": t0, "release_t": t1, "session": self.session, "person": self.person,
                 "mode": self.MODE, "segment_settings": settings.to_dict(), "problem": problem,
                 "segments_found": found, "pose_frames": int(len(pose["t"]))}
         if problem:
@@ -139,7 +137,7 @@ class Capture:
 
 class ButtonCapture(Capture):
     MODE = "button"
-    HELP = "type j, h or u to switch punch, x to undo, q to quit"
+    HELP = "type the first letter of a punch to switch to it (j or c, h, u), x to undo, q to quit"
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -150,8 +148,8 @@ class ButtonCapture(Capture):
         return next((k for k, n in self.remaining().items() if n > 0), None)
 
     def command(self, word):
-        if word in KEYS:
-            self.label = KEYS[word]
+        if word in self.keys:
+            self.label = self.keys[word]
             self.say(f"now recording {self.label}")
         else:
             super().command(word)
@@ -192,7 +190,7 @@ class ButtonCapture(Capture):
         top = 150
         if self.label:
             ps.put(frame, f"{self.label}  {self.counts.get(self.label, 0)}/{self.target}", top, YELLOW, 1.1, thick=3)
-            ps.put(frame, f"hold button, punch {HOW[self.label]}, release", top + 32, (255, 255, 255), 0.6)
+            ps.put(frame, f"hold button, punch {self.how[self.label]}, release", top + 32, (255, 255, 255), 0.6)
         else:
             ps.put(frame, "ALL DONE - train with python punch_train.py", top, GREEN, 0.8)
         draw_common(self, frame, top + 58, self.press_t is not None)
@@ -337,7 +335,7 @@ class PromptedCapture(Capture):
             ps.put(frame, f"next: {self.prompt}", top + 32, GREY, 0.6)
         elif self.phase == "go":
             ps.put(frame, f"{self.prompt}!", top, GREEN, 2.0, thick=5)
-            ps.put(frame, HOW[self.prompt], top + 40, (255, 255, 255), 0.7)
+            ps.put(frame, self.how[self.prompt], top + 40, (255, 255, 255), 0.7)
         elif self.phase == "free":
             ps.put(frame, f"MOVE, DON'T PUNCH  {max(0.0, self.phase_end - now):.0f}", top, ORANGE, 1.1, thick=3)
             ps.put(frame, "shuffle, adjust your guard, bob, feint", top + 32, (255, 255, 255), 0.6)
@@ -349,7 +347,7 @@ class PromptedCapture(Capture):
 
 def draw_common(cap, frame, row, button_held):
     h = frame.shape[0]
-    totals = "  ".join(f"{k} {cap.counts.get(k, 0)}/{cap.target}" for k in ps.LABELS) + f"  NONE {cap.counts.get(NONE, 0)}"
+    totals = "  ".join(f"{k} {cap.counts.get(k, 0)}/{cap.target}" for k in cap.arm.labels) + f"  NONE {cap.counts.get(NONE, 0)}"
     ps.put(frame, totals, row, GREY, 0.55)
     if not cap.sensors.glove_ok():
         ps.put(frame, "NO GLOVE DATA", row + 30, RED, 0.7)
@@ -364,18 +362,22 @@ def main():
     parser.add_argument("--target", type=int, default=100, help="punches wanted of each kind")
     parser.add_argument("--person", default="", help="who is punching (saved with each block)")
     parser.add_argument("--button", action="store_true", help="hold the glove button around each punch")
-    parser.add_argument("--data", default=ps.DATA_DIR, help="where to save blocks")
+    ps.add_arm_argument(parser)
+    parser.add_argument("--data", help="where to save blocks (default: the arm's folder, punch_data or punch_data_right)")
     parser.add_argument("--simulate", action="store_true", help="fake glove (no hardware)")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
     parser.add_argument("--camera", type=int, default=0)
-    parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
+    parser.add_argument("--port", type=int, help="UDP port the glove sends to (default: the arm's, 5005 or 5006)")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
     args = parser.parse_args()
+    arm = ps.ARMS[args.arm]
+    args.data, args.port = args.data or arm.data_dir, args.port or arm.port
 
     config = ps.load_config()
-    sensors = ps.LiveSensors(config["segment"], simulate=args.simulate, port=args.port)
+    sensors = ps.LiveSensors(config["segment"], simulate=args.simulate, port=args.port, arm=arm)
     cls = ButtonCapture if args.button else PromptedCapture
-    cap = cls(sensors, config, args.target, args.data, args.person)
+    cap = cls(sensors, config, args.target, args.data, args.person, arm)
+    print(f"{arm.name.upper()} ARM: punches {', '.join(arm.labels)}, glove on port {args.port}")
     print("Recording to", os.path.abspath(args.data), "| already have:", cap.counts)
     print(cap.HELP)
     threading.Thread(target=cap.read_terminal, daemon=True).start()

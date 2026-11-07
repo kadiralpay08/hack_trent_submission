@@ -111,7 +111,7 @@ def parse(packets, clock_per_sender=None):
         if clock_per_sender is not None:
             clock = clock_per_sender.setdefault(sender, glove_receiver.Clock())
         for s in glove_receiver.parse_frames(data):
-            good += FRAME_LEN
+            good += s.size  # 19 bytes, or 26 for a glove with a magnetometer
             if clock:
                 clock.stamp(s, arrival)
             samples.append(s)
@@ -229,8 +229,10 @@ def step4_punches(sock, wanted, seconds):
 
 
 def main():
+    global PORT  # --port changes the port every step uses
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--simulate", action="store_true", help="use a fake glove to try this tool")
+    parser.add_argument("--port", type=int, default=glove_receiver.PORT, help="UDP port to listen on: 5005 left glove, 5006 right glove")
     parser.add_argument("--wait", type=int, default=45, help="seconds to wait for the glove (step 1)")
     parser.add_argument("--hz", type=int, default=500, help="sensor rate the firmware should produce")
     parser.add_argument("--punches", type=int, default=5, help="punches to throw in step 4")
@@ -238,6 +240,7 @@ def main():
     parser.add_argument("--until", type=int, default=4, choices=[1, 2, 3, 4],
                         help="stop after this step (steps 3 and 4 need you to hold still / punch)")
     args = parser.parse_args()
+    PORT = args.port
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:

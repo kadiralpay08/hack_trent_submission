@@ -7,19 +7,26 @@ The window is [start - pre_s, end]. The part before the start is the wind-up, su
 
 Glove features (prefix imu_) are in the glove's own axes, so the sensor must be mounted the same way for
 training and play. "Vertical" means along gravity as measured just before the punch.
-Camera features (prefix pose_) are for the LEFT arm, in a body frame: right = toward the boxer's right
-shoulder, up, and forward, all in shoulder-widths. They are NaN when no body was seen; the random forest
-handles missing values.
+Magnetometer features (prefix imu_mag_) are only made for a glove that has one (the S3 glove's MPU-9250). They
+describe how the glove turned relative to the Earth's magnetic field, which the gyro cannot drift on.
+Camera features (prefix pose_) are for the glove's arm (side "L" or "R"), in a body frame: "right" =
+toward the middle of the body (for the right arm this is mirrored, so it means toward the left), up,
+and forward, all in shoulder-widths. Mirroring keeps "a hook swings out, then in" the same numbers for
+both arms. They are NaN when no body was seen; the random forest handles missing values.
 
 The motions they are built to tell apart (PROJECT.md):
-  jab       straight forward
-  hook      left, then forward, then right   -> wrist "right" goes down first, then up past the start
+  jab/cross straight forward
+  hook      out, then forward, then across   -> wrist "right" goes down first, then up past the start
+            (left: left, forward, right. right: right, forward, left)
   uppercut  down, then up                    -> wrist "up" dips first, then rises; vertical accel - then +
 """
 import numpy as np
 
 NOSE, L_SH, R_SH, L_EL, L_WR, L_HIP = 0, 11, 12, 13, 15, 23
+R_EL, R_WR, R_HIP = 14, 16, 24
+ARM_POINTS = {"L": (L_SH, L_EL, L_WR, L_HIP), "R": (R_SH, R_EL, R_WR, R_HIP)}  # shoulder, elbow, wrist, hip
 CLIP_G, CLIP_DPS = 15.9, 1990.0
+MAG_NAMES = ["imu_mag_turn", "imu_mag_spread"] + [f"imu_mag_{k}_{a}" for k in ("start", "change") for a in "xyz"]
 
 
 def _stats(prefix, values, out):
@@ -93,6 +100,35 @@ def imu_features(imu, seg, pre_s):
     out["imu_rot_max"] = float(np.max(np.linalg.norm(rot, axis=1)))
     out["imu_rot_mean"] = float(np.mean(np.linalg.norm(rot, axis=1)))
     out["imu_clipped"] = float(np.mean((np.abs(accel[main]) >= CLIP_G).any(axis=1) | (np.abs(rot) >= CLIP_DPS).any(axis=1)))
+    if "mag" in imu:
+        out.update(mag_features(imu, main, pre))
+    return out
+
+
+def _unit(v):
+    return v / (np.linalg.norm(v, axis=-1, keepdims=True) + 1e-9)
+
+
+def mag_features(imu, main, pre):
+    """How the glove turned relative to the Earth's magnetic field. NaN if the magnetometer was not
+    working for most of the punch. The field's direction in glove axes says how the glove is turned;
+    its change over the punch is a rotation the gyro cannot drift on."""
+    out = dict.fromkeys(MAG_NAMES, float("nan"))
+    ok = imu["mag_ok"]
+    window = main | pre
+    if ok[window].mean() < 0.8 or ok[main].sum() < 5:
+        return out
+    dirs = _unit(imu["mag"][main & ok])
+    k = max(1, len(dirs) // 5)
+    before = imu["mag"][pre & ok]
+    first = _unit(before.mean(axis=0)) if len(before) else _unit(dirs[:k].mean(axis=0))
+    last = _unit(dirs[-k:].mean(axis=0))
+    out["imu_mag_turn"] = float(np.degrees(np.arccos(np.clip(first @ last, -1, 1))))
+    mean = _unit(dirs.mean(axis=0))
+    out["imu_mag_spread"] = float(np.degrees(np.mean(np.arccos(np.clip(dirs @ mean, -1, 1)))))
+    for j, a in enumerate("xyz"):
+        out[f"imu_mag_start_{a}"] = float(first[j])
+        out[f"imu_mag_change_{a}"] = float(last[j] - first[j])
     return out
 
 
@@ -113,7 +149,9 @@ def pose_feature_names():
                     "pose_speed_max", "pose_low_start", "pose_wrist_vis", "pose_frames"]
 
 
-def pose_features(pose, seg, pre_s, camera_lag_s=0.0):
+def pose_features(pose, seg, pre_s, camera_lag_s=0.0, side="L"):
+    SH, EL, WR, HIP = ARM_POINTS[side]
+    mirror = -1.0 if side == "R" else 1.0  # so "right" means toward the middle of the body for both arms
     names = pose_feature_names()
     out = dict.fromkeys(names, float("nan"))
     if pose is None or len(pose["t"]) == 0:
@@ -132,11 +170,11 @@ def pose_features(pose, seg, pre_s, camera_lag_s=0.0):
     right /= np.linalg.norm(right) + 1e-9
     up = np.array([0.0, -1.0, 0.0])  # MediaPipe world y points down
     fwd = np.cross(up, right)
-    rel = (w[:, L_WR] - w[:, L_SH]) / sw
+    rel = (w[:, WR] - w[:, SH]) / sw
     series = {
-        "right": rel @ right, "up": rel @ up, "fwd": rel @ fwd,
-        "elbow": _angle(w[:, L_SH], w[:, L_EL], w[:, L_WR]),
-        "shoulder": _angle(w[:, L_HIP], w[:, L_SH], w[:, L_EL]),
+        "right": mirror * (rel @ right), "up": rel @ up, "fwd": rel @ fwd,
+        "elbow": _angle(w[:, SH], w[:, EL], w[:, WR]),
+        "shoulder": _angle(w[:, HIP], w[:, SH], w[:, EL]),
     }
     n = keep.sum()
     for name, v in series.items():
@@ -152,17 +190,18 @@ def pose_features(pose, seg, pre_s, camera_lag_s=0.0):
     out["pose_rise"] = float(u.max() - u.min())              # ...then rises
     steps = np.linalg.norm(np.diff(rel, axis=0), axis=1) / np.maximum(np.diff(t), 1e-3)
     out["pose_speed_max"] = float(steps.max()) if len(steps) else float("nan")
-    out["pose_low_start"] = float(w[0, L_WR, 1] > w[0, L_EL, 1])  # wrist below elbow at the start
-    out["pose_wrist_vis"] = float(vis[:, L_WR].mean())
+    out["pose_low_start"] = float(w[0, WR, 1] > w[0, EL, 1])  # wrist below elbow at the start
+    out["pose_wrist_vis"] = float(vis[:, WR].mean())
     return out
 
 
-def extract(imu, pose, seg, pre_s, camera_lag_s=0.0):
-    """All features for one punch, as {name: value}, or None if there is too little glove data."""
+def extract(imu, pose, seg, pre_s, camera_lag_s=0.0, side="L"):
+    """All features for one punch, as {name: value}, or None if there is too little glove data.
+    side is the glove's arm ("L" or "R"), for the camera features."""
     imu_part = imu_features(imu, seg, pre_s)
     if imu_part is None:
         return None
-    return {**imu_part, **pose_features(pose, seg, pre_s, camera_lag_s)}
+    return {**imu_part, **pose_features(pose, seg, pre_s, camera_lag_s, side)}
 
 
 def select(names, feature_set):

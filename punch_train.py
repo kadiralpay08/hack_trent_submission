@@ -25,8 +25,8 @@ import punch_segment
 import punch_session as ps
 
 
-def build_dataset(root, config, quiet=False):
-    """Returns (X, y, groups, names, skipped)."""
+def build_dataset(root, config, quiet=False, side="L"):
+    """Returns (X, y, groups, names, skipped). side is the arm the camera features look at."""
     rows, labels, groups, skipped = [], [], [], Counter()
     seg_settings, lag = config["segment"], config["camera_lag_s"]
     for path in ps.block_paths(root):
@@ -37,7 +37,7 @@ def build_dataset(root, config, quiet=False):
         if seg is None or seg.reason == "gap":
             skipped["no punch found with the current settings"] += 1
             continue
-        feats = punch_features.extract(imu, block["pose"], seg, seg_settings.pre_s, lag)
+        feats = punch_features.extract(imu, block["pose"], seg, seg_settings.pre_s, lag, side=side)
         if feats is None:
             skipped["too little glove data"] += 1
             continue
@@ -46,7 +46,7 @@ def build_dataset(root, config, quiet=False):
         groups.append(meta.get("session", "?"))
     if not rows:
         return None, None, None, None, skipped
-    names = list(rows[0])
+    names = list(dict.fromkeys(n for r in rows for n in r))  # every feature any block has (e.g. magnetometer)
     X = np.array([[r.get(n, np.nan) for n in names] for r in rows], dtype=float)
     return X, np.array(labels), np.array(groups), names, skipped
 
@@ -99,16 +99,20 @@ def evaluate(X, y, groups, names, feature_set, min_confidence, show=True):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--data", default=ps.DATA_DIR)
-    parser.add_argument("--out", default=ps.MODEL_PATH)
+    ps.add_arm_argument(parser)
+    parser.add_argument("--data", help="recordings to train on (default: the arm's folder)")
+    parser.add_argument("--out", help="where to save the model (default: the arm's model file)")
     parser.add_argument("--features", choices=["both", "imu", "pose"], default="both")
     parser.add_argument("--config", default=ps.CONFIG_PATH)
     args = parser.parse_args(argv)
+    arm = ps.ARMS[args.arm]
+    args.data, args.out = args.data or arm.data_dir, args.out or arm.model_path
+    print(f"{arm.name.upper()} ARM: training on {os.path.relpath(args.data)}, saving {os.path.relpath(args.out)}")
 
     config = ps.load_config(args.config)
-    X, y, groups, names, skipped = build_dataset(args.data, config)
+    X, y, groups, names, skipped = build_dataset(args.data, config, side=arm.side)
     if X is None:
-        print(f"No usable blocks in {os.path.abspath(args.data)}. Record some with python punch_capture.py.")
+        print(f"No usable blocks in {os.path.abspath(args.data)}. Record some with python punch_capture.py --arm {arm.name}.")
         for why, n in skipped.items():
             print(f"  skipped {n}: {why}")
         return 1
@@ -157,6 +161,7 @@ def main(argv=None):
     print("most useful features: " + ", ".join(f"{n} {v:.2f}" for v, n in top))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     joblib.dump({"model": forest, "features": used, "labels": list(forest.classes_), "feature_set": args.features,
+                 "arm": arm.name, "side": arm.side,
                  "segment": config["segment"].to_dict(), "camera_lag_s": config["camera_lag_s"],
                  "min_confidence": config["min_confidence"], "trained_at": time.strftime("%Y-%m-%d %H:%M"),
                  "counts": {str(k): int(v) for k, v in counts.items()},

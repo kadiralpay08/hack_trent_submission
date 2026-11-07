@@ -58,6 +58,8 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | A fourth class, NONE, for movement that isn't a punch | Anything the punch finder catches reaches the model in play. Without NONE, every guard adjustment would become a jab, hook or uppercut |
 | Sensitivity is adjustable without retraining | The confidence cutoff comes from `punch_config.json` or `--confidence`, not the model, and the [ and ] keys change it while playing (not F5/F6, which reload a browser game). `--start-g` moves the punch threshold, but only small changes are safe; big ones need a retrain. The timeout always needs a retrain |
 | Low-confidence predictions press no key | The model only knows three classes, so other movement must not be forced into one of them |
+| A second arm is optional and fully separate (2026-11-07) | The right glove uses port 5006, its own data folder, model and punches (CROSS, HOOK, UPPERCUT), selected with `--arm right`. The left arm keeps its original data and model, and stays the default. Camera features are mirrored for the right arm |
+| The glove sends to one laptop's address, not broadcast (2026-11-07) | Broadcast over the phone hotspot lost about a third of the samples, in gaps of up to about 350 ms, enough to swallow a whole punch. Sending to one address gets WiFi's automatic re-sends. To use another computer, flash its address |
 | Separate live script, `controller.py` left unchanged | Keeps Kadir's rule-based controller as a demo fallback |
 
 ## Code map
@@ -75,11 +77,12 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | `punch_live.py` | Classifies punches live and presses keys |
 | `punch_config.json` | Shared punch-finding settings |
 | `punch_sim.py` | Fake glove data that follows the punch definitions. Used by `--simulate` and the tests. It shows the code runs, not that the model works on real punches |
+| `punch_live_both.py` | Runs the left and right models side by side, with one camera |
 | `tests/test_punch_pipeline.py` | Run with `python -m unittest discover tests` |
 
 **Status (2026-11-07):** all of the above is built and tested on simulated data. The firmware compiles but hasn't been flashed. Nothing has been tested on real punches yet.
 
-**Shared parts:** `glove_receiver.py`, `pose_tracker.py`, `game_input.py`, `firmware/glove_imu/`.
+**Shared parts:** `glove_receiver.py`, `pose_tracker.py`, `game_input.py`, `firmware/glove_imu/` (the left glove, ESP32-CAM). `firmware/glove_imu_s3/` is an ESP32-S3 glove for either arm, and `firmware/mpu6050_usb_check/` and `firmware/mpu9250_usb_check/` check whether a sensor is alive over USB.
 
 **Earlier work, kept and not the main path:** `controller.py`, `glove_punch.py`, `punch_detector.py`, `tune_punches.py`, `replay_punches.py` (Kadir's camera-rules controller), `glove_check.py` (still the first thing to run if the glove seems broken), `punch_tracker.py`, `firmware/punch_stream/`, `firmware/sketch_nov6a/` (wired Uno experiments).
 

@@ -13,6 +13,7 @@ import queue
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -21,9 +22,47 @@ import punch_segment
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(ROOT, "punch_config.json")
-DATA_DIR = os.path.join(ROOT, "punch_data")
-MODEL_PATH = os.path.join(ROOT, "models", "punch_rf.joblib")
-LABELS = ("JAB", "HOOK", "UPPERCUT")
+
+
+# --- the two arms --------------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Arm:
+    """Everything that differs between the left and right glove. Each arm has its own port, recordings,
+    model and punch names, so the two are recorded, trained and run separately."""
+    name: str            # "left" or "right"
+    side: str            # "L" or "R": which arm the camera features look at
+    port: int            # UDP port its glove sends to
+    data_dir: str        # its training recordings
+    model_path: str      # its trained random forest
+    labels: tuple        # its punches; NONE (not a punch) is added by training when recorded
+    how: dict = field(default_factory=dict)  # how to throw each punch, shown when recording
+    mirror: bool = False  # the simulator mirrors left-right for this arm
+    magnetometer: bool = False  # its glove has one (the simulator fakes it)
+
+
+# Left: the ESP32-CAM glove (firmware/glove_imu; an MPU6050, or an MPU-6500, which reads the same).
+# Right: a second glove on port 5006, for example firmware/glove_imu_s3 with UDP_PORT set to 5006.
+ARMS = {
+    "left": Arm("left", "L", 5005, os.path.join(ROOT, "punch_data"), os.path.join(ROOT, "models", "punch_rf.joblib"),
+                ("JAB", "HOOK", "UPPERCUT"),
+                {"JAB": "straight forward", "HOOK": "left, then forward, then right",
+                 "UPPERCUT": "arm drops down, then drives up"}),
+    "right": Arm("right", "R", 5006, os.path.join(ROOT, "punch_data_right"),
+                 os.path.join(ROOT, "models", "punch_rf_right.joblib"),
+                 ("CROSS", "HOOK", "UPPERCUT"),
+                 {"CROSS": "straight forward", "HOOK": "right, then forward, then left",
+                  "UPPERCUT": "arm drops down, then drives up"}, mirror=True, magnetometer=True),
+}
+
+# The left arm's paths, kept under their old names so existing code and data work unchanged.
+DATA_DIR = ARMS["left"].data_dir
+MODEL_PATH = ARMS["left"].model_path
+LABELS = ARMS["left"].labels
+
+
+def add_arm_argument(parser):
+    parser.add_argument("--arm", choices=sorted(ARMS), default="left",
+                        help="which glove: left (ESP32-CAM, port 5005) or right (ESP32-S3, port 5006)")
 
 
 # --- settings -----------------------------------------------------------------------------------------
@@ -56,9 +95,10 @@ class LiveSensors:
     Wire the camera in with pose_callbacks().
     """
 
-    def __init__(self, settings, seconds=30, simulate=False, port=glove_receiver.PORT):
+    def __init__(self, settings, seconds=30, simulate=False, port=glove_receiver.PORT, arm=None):
         self.lock = threading.Lock()
-        self.imu = deque(maxlen=int(seconds * 600))  # (t, t_us, ax, ay, az, gx, gy, gz, button)
+        # (t, t_us, ax, ay, az, gx, gy, gz, button, mx, my, mz, mag_ok); mag is 0 and not ok without one
+        self.imu = deque(maxlen=int(seconds * 600))
         self.pose = deque(maxlen=int(seconds * 40))   # (t, world 33x3, visibility 33)
         self.events = queue.Queue()
         self.segmenter = punch_segment.Segmenter(settings)
@@ -74,7 +114,9 @@ class LiveSensors:
         self.sim_stop = None
         if simulate:
             import punch_sim
-            self.sim_stop = punch_sim.start_simulator(port=port)
+            arm = arm or ARMS["left"]
+            self.sim_stop = punch_sim.start_simulator(port=port, kinds=arm.labels, mirror=arm.mirror,
+                                                      magnetometer=arm.magnetometer)
 
     def set_settings(self, settings):
         with self.lock:
@@ -86,7 +128,8 @@ class LiveSensors:
 
     def _on_sample(self, glove, s):
         with self.lock:
-            self.imu.append((s.t, s.t_us, *s.accel, *s.gyro, s.button))
+            mag = s.mag if s.mag is not None else (0.0, 0.0, 0.0)
+            self.imu.append((s.t, s.t_us, *s.accel, *s.gyro, s.button, *mag, s.mag_ok))
             self.samples_seen += 1
             self.last_sample_wall = time.time()
             if s.button != self.button:
@@ -142,10 +185,29 @@ class LiveSensors:
             self.sim_stop.set()
 
 
+def shared_pose_callbacks(*sensors):
+    """One camera feeding several gloves (both arms): every frame goes to each LiveSensors' pose buffer."""
+    parts = [s.pose_callbacks() for s in sensors]
+
+    def on_pose(world, visibility):
+        for p in parts:
+            p["on_pose"](world, visibility)
+
+    def on_features(now, speeds, travel, from_low):
+        for p in parts:
+            p["on_features"](now, speeds, travel, from_low)
+        return None
+
+    return {"on_pose": on_pose, "on_features": on_features, "builtin_punches": False}
+
+
 def imu_arrays(rows):
-    a = np.array(rows, dtype=float).reshape(-1, 9)
-    return {"t": a[:, 0], "t_us": a[:, 1].astype(np.int64), "accel": a[:, 2:5], "gyro": a[:, 5:8],
-            "button": a[:, 8].astype(bool)}
+    a = np.array(rows, dtype=float).reshape(-1, 13)
+    out = {"t": a[:, 0], "t_us": a[:, 1].astype(np.int64), "accel": a[:, 2:5], "gyro": a[:, 5:8],
+           "button": a[:, 8].astype(bool)}
+    if a[:, 12].any():  # only a glove with a working magnetometer gets magnetometer data
+        out["mag"], out["mag_ok"] = a[:, 9:12], a[:, 12].astype(bool)
+    return out
 
 
 def pose_arrays(rows):
@@ -175,8 +237,9 @@ class Classifier:
             print(f"Note: this model has settings that no longer exist and are ignored: {', '.join(old)}. Retrain to update it.")
         self.segment = punch_segment.SegmentSettings.from_dict({k: v for k, v in bundle["segment"].items() if k in known})
         self.camera_lag_s = bundle.get("camera_lag_s", 0.0)
+        self.side = bundle.get("side", "L")  # models from before the right glove are left-arm models
         self.min_confidence = load_config()["min_confidence"] if min_confidence is None else float(min_confidence)
-        self.info = {k: bundle.get(k) for k in ("trained_at", "counts", "cv_accuracy", "feature_set")}
+        self.info = {k: bundle.get(k) for k in ("trained_at", "counts", "cv_accuracy", "feature_set", "arm")}
 
     @staticmethod
     def exists(path=MODEL_PATH):
@@ -186,7 +249,7 @@ class Classifier:
         """(label, confidence) for one punch, or (None, 0.0) if there is too little glove data."""
         import punch_features
         feats = punch_features.extract(imu, pose, seg, self.segment.pre_s if pre_s is None else pre_s,
-                                       self.camera_lag_s)
+                                       self.camera_lag_s, side=self.side)
         if feats is None:
             return None, 0.0
         x = np.array([[feats.get(n, np.nan) for n in self.features]], dtype=float)
@@ -196,9 +259,10 @@ class Classifier:
 
 
 # --- training blocks ----------------------------------------------------------------------------------
-# One .npz per button press: punch_data/<LABEL>/<LABEL>_<time>.npz, holding the raw glove samples
-# (imu_t, imu_t_us, imu_accel in g, imu_gyro in deg/s, imu_button), the pose frames (pose_t, pose_world,
-# pose_vis) and a JSON "meta" string (label, press_t, release_t, session, settings when recorded).
+# One .npz per punch: <arm's data_dir>/<LABEL>/<LABEL>_<time>.npz (left: punch_data/, right:
+# punch_data_right/), holding the raw glove samples (imu_t, imu_t_us, imu_accel in g, imu_gyro in deg/s,
+# imu_button, and for a glove with a magnetometer imu_mag in uT and imu_mag_ok), the pose frames (pose_t,
+# pose_world, pose_vis) and a JSON "meta" string (label, arm, press_t, release_t, session, settings).
 # Folders starting with "_" (such as _rejected) are ignored by training.
 
 def save_block(label, imu, pose, meta, root=DATA_DIR, rejected=False):
@@ -208,9 +272,10 @@ def save_block(label, imu, pose, meta, root=DATA_DIR, rejected=False):
     path, n = os.path.join(folder, f"{label}_{stamp}.npz"), 1
     while os.path.exists(path):  # never overwrite a block saved in the same millisecond
         path, n = os.path.join(folder, f"{label}_{stamp}_{n}.npz"), n + 1
+    extra = {"imu_mag": imu["mag"], "imu_mag_ok": imu["mag_ok"]} if "mag" in imu else {}
     np.savez_compressed(path, imu_t=imu["t"], imu_t_us=imu["t_us"], imu_accel=imu["accel"],
                         imu_gyro=imu["gyro"], imu_button=imu["button"], pose_t=pose["t"],
-                        pose_world=pose["world"], pose_vis=pose["vis"], meta=json.dumps(meta))
+                        pose_world=pose["world"], pose_vis=pose["vis"], meta=json.dumps(meta), **extra)
     return path
 
 
@@ -219,6 +284,8 @@ def load_block(path):
         meta = json.loads(str(z["meta"]))
         imu = {"t": z["imu_t"], "t_us": z["imu_t_us"], "accel": z["imu_accel"], "gyro": z["imu_gyro"],
                "button": z["imu_button"]}
+        if "imu_mag" in z:
+            imu["mag"], imu["mag_ok"] = z["imu_mag"], z["imu_mag_ok"]
         pose = {"t": z["pose_t"], "world": z["pose_world"], "vis": z["pose_vis"]}
     return {"path": path, "meta": meta, "imu": imu, "pose": pose}
 
@@ -235,8 +302,8 @@ def block_paths(root=DATA_DIR):
     return out
 
 
-def count_blocks(root=DATA_DIR):
-    counts = dict.fromkeys(LABELS, 0)
+def count_blocks(root=DATA_DIR, labels=LABELS):
+    counts = dict.fromkeys(labels, 0)
     for path in block_paths(root):
         label = os.path.basename(os.path.dirname(path))
         counts[label] = counts.get(label, 0) + 1
