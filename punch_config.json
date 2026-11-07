@@ -3,8 +3,7 @@
   "segment": {
     "timeout_s": 0.4,
     "start_g": 2.5,
-    "decel_g": 1.5,
-    "stop_ratio": 0.3,
+    "decel_g": 3.0,
     "settle_g": 1.5,
     "settle_s": 0.02,
     "min_peak_speed": 1.5,

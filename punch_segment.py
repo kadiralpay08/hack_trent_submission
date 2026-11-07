@@ -7,14 +7,18 @@ A punch STARTS when acceleration beyond gravity reaches start_g.
 
 It ENDS at whichever comes first:
   - timeout: timeout_s after the start.
-  - deceleration: the arm braked (acceleration of at least decel_g against the direction of travel)
-    until it was nearly stopped (speed below stop_ratio of the punch's top speed), and then settled
-    (acceleration below settle_g for settle_s).
+  - deceleration: the arm braked hard (acceleration of at least decel_g against the direction of
+    travel, once the punch has reached min_peak_speed), and then settled (acceleration below settle_g
+    for settle_s).
 
 Why the extra conditions on deceleration: an uppercut goes down then up, and a hook goes left, forward,
 then right. Each reversal is also strong acceleration against the direction of travel. Ending there would
 cut the punch off before the part that matters. A reversal keeps accelerating hard, so it never "settles",
 and the small wind-up never reaches min_peak_speed. A real stop does both.
+
+The estimated speed is only used for its direction and its early peak. It is NOT used to decide that
+the arm has stopped: on the real glove it drifts (about 1 to 1.5 m/s left over after a jab), so a
+"speed near zero" test never passed and every punch ran to the timeout (recorded 2026-11-07).
 
 Gravity is tracked while the glove is still and turned with the gyroscope while it moves, so the
 acceleration used here is the glove's own motion rather than its tilt.
@@ -30,8 +34,7 @@ G = 9.80665
 class SegmentSettings:
     timeout_s: float = 0.40        # the punch ends this long after it starts, unless it stopped sooner
     start_g: float = 2.5           # acceleration beyond gravity that starts a punch
-    decel_g: float = 1.5           # braking against the direction of travel, in g, that counts as stopping
-    stop_ratio: float = 0.3        # ...and speed must fall below this fraction of the punch's top speed
+    decel_g: float = 3.0           # braking against the direction of travel, in g, that counts as stopping
     settle_g: float = 1.5          # ...and acceleration must then stay below this
     settle_s: float = 0.02         # ...for this long
     min_peak_speed: float = 1.5    # m/s; a motion slower than this cannot end early (an uppercut's dip)
@@ -130,16 +133,10 @@ class Segmenter:
         seg.peak_speed = max(seg.peak_speed, speed)
         elapsed = t - seg.start_t
 
-        if speed > 0.05:
-            along = float(np.dot(self.linear, self.velocity / speed))
-            if along <= -s.decel_g:
+        if speed > 0.05 and seg.peak_speed >= s.min_peak_speed:
+            if float(np.dot(self.linear, self.velocity / speed)) <= -s.decel_g:
                 self.braked = True
-            elif along >= s.decel_g and speed > s.stop_ratio * seg.peak_speed:
-                # speeding up again to real speed: that was a reversal, not a stop. (Braking a little
-                # past zero at a real stop also turns the velocity round, but it stays slow.)
-                self.braked = False
-        stopped = self.braked and seg.peak_speed >= s.min_peak_speed and speed <= s.stop_ratio * seg.peak_speed
-        self.settled_for = self.settled_for + dt if stopped and size < s.settle_g else 0.0
+        self.settled_for = self.settled_for + dt if self.braked and size < s.settle_g else 0.0
 
         if elapsed >= s.timeout_s:
             return self._end(t, "timeout")
