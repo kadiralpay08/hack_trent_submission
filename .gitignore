@@ -1,8 +1,9 @@
 __pycache__/
 .venv/
-models/
+models/*
+!models/punch_rf.joblib
 .claude/settings.local.json
 firmware/glove_imu/config.h
 tuning_data/
-punch_data/
+punch_data/_rejected/
 firmware/*/build/
