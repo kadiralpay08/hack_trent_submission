@@ -38,11 +38,20 @@ class Hotkeys:
         return fired
 
 
-def make_callbacks(game, hotkeys, log=print):
-    """Build the three functions pose_tracker.main() calls. Kept separate so it can be tested."""
+def make_callbacks(game, hotkeys, log=print, glove=None):
+    """Build the three functions pose_tracker.main() calls. Kept separate so it can be tested.
+
+    glove is an optional glove_punch.GlovePunches. When given, a camera punch only counts if that
+    hand's glove also felt one. A hand with no glove connected is never blocked.
+    """
     last_states = []
 
     def on_punch(kind, side, speed):
+        if glove is not None:
+            glove.poll()
+            if not glove.confirms(side):
+                log(f"{side} {kind} ignored (the {side} glove felt no punch)")
+                return
         if not game.enabled:
             log(f"{side} {kind} (output OFF, press F8)")
         elif game.punch(kind):
@@ -58,6 +67,8 @@ def make_callbacks(game, hotkeys, log=print):
         last_states = list(states)
 
     def on_frame():
+        if glove is not None:
+            glove.poll()
         if hotkeys.pressed(VK_F8):
             game.set_enabled(not game.enabled)
             log("key output " + ("ON" if game.enabled else "OFF"))
@@ -70,6 +81,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--mapping", default=os.path.join(os.path.dirname(__file__), "mappings", "browser_boxing.json"))
     parser.add_argument("--live", action="store_true", help="really press keys (default: only print them)")
+    parser.add_argument("--glove", action="store_true",
+                        help="listen for the glove on UDP port 5005 and only accept punches the glove also felt")
+    parser.add_argument("--simulate-glove", action="store_true",
+                        help="like --glove, but with a fake glove that punches every 1.5 s (for testing)")
     args = parser.parse_args()
 
     mapping = game_input.Mapping.load(args.mapping)
@@ -82,8 +97,19 @@ def main():
     print(f"Key output is {'ON' if game.enabled else 'OFF'}. F8 toggles it, F9 quits.")
     print("Stand in your guard in front of the camera and press c in the camera window to calibrate.")
 
+    glove = None
+    if args.glove or args.simulate_glove:
+        import threading
+        import glove_punch
+        import glove_receiver
+        receiver = glove_receiver.GloveReceiver()
+        if args.simulate_glove:
+            threading.Thread(target=glove_receiver.simulate, daemon=True).start()
+        glove = glove_punch.GlovePunches(receiver)
+        print("Glove: listening on UDP port 5005. Camera punches need a matching glove punch.")
+
     import pose_tracker  # imported here so the rest of this file works without OpenCV or MediaPipe
-    on_punch, on_states, on_frame = make_callbacks(game, Hotkeys())
+    on_punch, on_states, on_frame = make_callbacks(game, Hotkeys(), glove=glove)
     try:
         pose_tracker.main(on_punch=on_punch, on_states=on_states, on_frame=on_frame)
     finally:
