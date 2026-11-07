@@ -92,6 +92,9 @@ class Capture:
     # --- one block ---
     def finish_block(self, press_t, release_t):
         label = self.label
+        if label is None:
+            self.say("all punches are done; type j, h or u to record more", ORANGE)
+            return
         held = release_t - press_t
         imu, pose = self.sensors.window(press_t - PRE_S, release_t + POST_S)
         settings = self.sensors.settings

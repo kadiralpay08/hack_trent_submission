@@ -159,6 +159,7 @@ class Classifier:
         import joblib
         bundle = joblib.load(path)
         self.model, self.features = bundle["model"], bundle["features"]
+        self.model.n_jobs = 1  # one punch at a time: starting worker threads costs more than it saves
         self.labels = list(bundle["labels"])
         self.segment = punch_segment.SegmentSettings.from_dict(bundle["segment"])
         self.camera_lag_s = bundle.get("camera_lag_s", 0.0)

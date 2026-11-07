@@ -7,7 +7,7 @@ The team's agreed plan. Every agent and teammate works from it. If your task con
 1. **Check for new work:** run `git fetch origin`, then `git log --oneline HEAD..origin/main` and `git branch -r`. Read anything that touches your files. Teammates merge often, so a file list from earlier in a session can be out of date.
 2. **Check the Brain:** run `entire brain brief "<task>" --json` and `entire brain recall "<question>" --json` for earlier decisions and known problems.
 3. **Check the code:** follow `.entire/agent-guide.md` and use Graph to find what depends on the code you'll change.
-4. **Branch from an up-to-date `main`:** name it `yourname/what-youre-building`. Never commit straight to `main`. It is protected, so work reaches it through a pull request.
+4. **Branch from an up-to-date `main`:** name it `yourname/what-youre-building`. Never commit straight to `main`. It is protected, so work reaches it through a pull request, and Kadir must explicitly approve a merge to `main`. Before any push or merge, say what the source and target are.
 5. **Agree who owns a file** before editing a teammate's file.
 6. **Record what you learn:** use `entire brain remember "<memory>" --path <category.subcategory.type> --kind <decision|gotcha|...> --json` for anything durable the code doesn't state, and update this file if the plan changes.
 
@@ -22,7 +22,7 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch a
 1. **Glove:** an ESP32-CAM reads an MPU6050 and streams raw data over WiFi using UDP, at 500 Hz.
 2. **Network:** the ESP32 and laptop share a phone hotspot (2.4 GHz). Set `LAPTOP_IP` in `config.h` to the laptop's address on the hotspot, and allow Python through the Windows firewall.
 3. **Camera and sync:** the laptop runs pose estimation on webcam frames (OpenCV captures, MediaPipe estimates the pose). IMU samples and frames are both timestamped on the laptop clock so they can be matched up.
-4. **Finding a punch:** a punch starts on high acceleration. It ends at a selectable timeout or on high deceleration, whichever comes first. `punch_tune.py` sets the timeout and shows starts and ends live on the pose display.
+4. **Finding a punch:** a punch starts on high acceleration. It ends at a selectable timeout or on high deceleration, whichever comes first. `punch_tune.py` sets the timeout and shows starts and ends live on the pose display. Its timed test (`test 10 60 jab`) counts and classifies the punches thrown in one minute, at the current timeout and at several others for comparison.
 5. **Classifying:** a random forest uses features from the IMU and from joint angles. Only if that isn't good enough, try a small neural network on the raw sensor data (Google Colab or Gemini tools are options, undecided).
 6. **Output:** each punch becomes a key press. Defence keys from the camera stay on.
 
@@ -70,10 +70,19 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts**. For each one: press 
 | `punch_train.py` | Trains and evaluates the random forest |
 | `punch_live.py` | Classifies punches live and presses keys |
 | `punch_config.json` | Shared punch-finding settings |
+| `punch_sim.py` | Fake glove data that follows the punch definitions. Used by `--simulate` and the tests. It shows the code runs, not that the model works on real punches |
+| `tests/test_punch_pipeline.py` | Run with `python -m unittest discover tests` |
+
+**Status (2026-11-07):** all of the above is built and tested on simulated data. The firmware compiles but hasn't been flashed. Nothing has been tested on real punches yet.
 
 **Shared parts:** `glove_receiver.py`, `pose_tracker.py`, `game_input.py`, `firmware/glove_imu/`.
 
 **Earlier work, kept and not the main path:** `controller.py`, `glove_punch.py`, `punch_detector.py`, `tune_punches.py`, `replay_punches.py` (Kadir's camera-rules controller), `glove_check.py` (still the first thing to run if the glove seems broken), `punch_tracker.py`, `firmware/punch_stream/`, `firmware/sketch_nov6a/` (wired Uno experiments).
+
+## Setup notes
+
+- **Python:** use a virtual environment: `python -m venv .venv`, then `pip install -r requirements.txt`. On Andre's laptop, Python 3.12 works. A team memory says another dev machine needs Python 3.14, because its default Python (an MSYS2 build) can't install OpenCV or MediaPipe.
+- **Firmware:** board "AI Thinker ESP32-CAM" with ESP32 core 3.x. Copy `config.example.h` to `config.h` and fill in the hotspot details.
 
 ## Limits to keep in mind
 

@@ -162,4 +162,5 @@ if __name__ == "__main__":
         for glove in list(receiver.samples):
             recent = receiver.recent(glove, 0.5)
             peak = max((np.linalg.norm(s.accel) for s in recent), default=0)
-            print(f"glove {glove}: {len(recent) * 2} Hz, peak accel {peak:.1f} g, gyro {receiver.latest(glove).gyro.round(0)}")
+            button = "HELD" if receiver.latest(glove).button else "up"
+            print(f"glove {glove}: {len(recent) * 2} Hz, peak accel {peak:.1f} g, gyro {receiver.latest(glove).gyro.round(0)}, button {button}")
