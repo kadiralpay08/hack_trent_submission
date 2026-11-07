@@ -100,6 +100,38 @@ python glove_receiver.py --simulate  # fake a glove, with no hardware needed
 
 To tell two gloves apart, add their IP addresses to `GLOVE_BY_IP`. Any glove not listed is treated as `L`. If the sensor is mounted at an angle, set `AXIS_MAP` and `AXIS_SIGN`.
 
+### `phyphox_imu.py`
+
+Receives a phone's accelerometer and gyroscope as the right-hand sensor, by polling the free phyphox app. The laptop opens the connection to the phone, so nothing has to get through the laptop's firewall. On the phone, open a phyphox experiment with the accelerometer **with gravity** and the gyroscope, turn on remote access in its menu (it shows an address), and press play. Then:
+
+```powershell
+python phyphox_imu.py --phone 172.20.10.1 --discover   # check it finds the accelerometer and gyroscope buffers
+python phyphox_imu.py --phone 172.20.10.1              # print the readings as they arrive
+```
+
+An iPhone's address has no port (80); an Android phone shows one, as in `--phone 192.168.1.20:8080`. On an iPhone's own hotspot the phone is usually `172.20.10.1`. iOS may also need phyphox's Local Network permission. `--start` starts the measurement from the laptop, `--accel-only` is for an experiment with no gyroscope (rotation becomes zeros), and `--acc` / `--gyro` name the buffers if `--discover` can't find them. Units are converted from m/s² and rad/s to g and deg/s, and samples use the glove id `R`, so the left glove's pipeline does not see them. It has run on a real phone (about 80 Hz at rest), and the rest is tested against a fake phone built from phyphox's published API.
+
+**As the right arm's sensor.** Add `--phone ADDRESS` to `--arm right` instead of a glove on port 5006, in `punch_capture.py`, `punch_tune.py` and `punch_live.py` (or `--right-phone ADDRESS` in `punch_live_both.py`). `--phone` is refused for the left arm, so the left glove's recordings and model can't be mixed with it.
+
+```powershell
+python punch_capture.py --arm right --phone 172.20.10.1 --person andre   # record CROSS, HOOK, UPPERCUT and NONE
+python punch_train.py --arm right                                        # trains models/punch_rf_right.joblib
+python punch_live.py --arm right --phone 172.20.10.1 --live
+```
+
+A phone has no magnetometer, so those features are left out, and it samples at about 80 Hz against a glove's 500 Hz. The punch-finding settings are shared by both arms (`punch_config.json`), so check them with `punch_tune.py --arm right --phone ...` before recording.
+
+### `phone_imu.py`
+
+The browser-page alternative to the above, which did not work in our test because the phone's connection never reached the laptop. Receives a phone's accelerometer and gyroscope as the right-hand sensor. The laptop serves a small web page, and the phone's browser sends its motion data back. There is nothing to install on the phone, but browsers only share motion data with https pages, so the laptop makes a certificate for itself (it needs OpenSSL, which comes with Git for Windows) and the phone asks you to accept it once.
+
+```powershell
+python phone_imu.py              # prints the address to open on the phone, then the data as it arrives
+python phone_imu.py --no-tls     # plain http, to test on this computer only
+```
+
+On the phone, open the printed `https://<laptop address>:8443` in Safari or Chrome, accept the certificate warning, tap Start and allow motion access. Keep the page open and the screen on. Windows Firewall (and Norton, if it is on) must allow inbound TCP on port 8443. If the phone lying flat with the screen up reads -1 g on z, run with `--flip-accel`. If rotation looks about 57 times too small, add `--gyro-rad`. Set `AXIS_MAP` and `AXIS_SIGN` for how the phone sits on the hand. Samples use the glove id `R` and the same units as `glove_receiver.py`, and the left glove's pipeline does not see them. Nothing finds or classifies right-hand punches yet.
+
 ## Firmware
 
 The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the ESP32 board package (core 3.x). Each sketch lists its wiring at the top of the file.

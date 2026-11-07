@@ -314,6 +314,7 @@ class Tuner:
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ps.add_arm_argument(parser)
+    ps.add_phone_argument(parser)
     parser.add_argument("--simulate", action="store_true", help="use a fake glove (no hardware)")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
     parser.add_argument("--camera", type=int, default=0)
@@ -324,8 +325,9 @@ def main():
     config = ps.load_config()
     arm = ps.ARMS[args.arm]
     args.port = args.port or arm.port
-    print(f"{arm.name.upper()} ARM: glove on port {args.port}")
-    sensors = ps.LiveSensors(config["segment"], seconds=150, simulate=args.simulate, port=args.port, arm=arm)  # room for a 2-minute test
+    print(f"{arm.name.upper()} ARM: " + (f"phone at {args.phone}" if args.phone else f"glove on port {args.port}"))
+    sensors = ps.LiveSensors(config["segment"], seconds=150, simulate=args.simulate, port=args.port, arm=arm,
+                             phone=ps.phone_for(args))  # room for a 2-minute test
     tuner = Tuner(sensors, config, arm)
     if tuner.classifier:
         print(f"Model loaded (trained {tuner.classifier.info['trained_at']}), so timed tests classify punches.")
