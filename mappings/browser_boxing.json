@@ -1,0 +1,21 @@
+{
+  "game": "Browser Boxing (see phaser.io/news/2026/09/browser-boxing-phaser-multiplayer-boxing)",
+  "tap_hold_ms": 50,
+  "taps": {
+    "JAB": "j",
+    "CROSS": "k",
+    "HOOK": "h",
+    "UPPERCUT": "u"
+  },
+  "holds": {
+    "BLOCK": "w",
+    "DUCK": "s",
+    "SLIP LEFT": "a",
+    "SLIP RIGHT": "d"
+  },
+  "notes": [
+    "Keys come from the game's published controls: A/D move, W/S high/low guard, J jab, K cross, H hook, U uppercut.",
+    "Not yet checked in play: whether W/S guard is held or toggled, and which way SLIP LEFT/RIGHT should move the boxer.",
+    "If the boxer moves the wrong way, swap the a and d entries."
+  ]
+}

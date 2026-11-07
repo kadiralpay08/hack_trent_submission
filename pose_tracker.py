@@ -2,7 +2,7 @@
 
 Punches are measured in a body frame (forward / sideways / up) built from MediaPipe's
 3D world landmarks, so they work at any angle to the camera.
-Keys: c = calibrate (stand in guard), a/d = rotate the 3D view, q = quit.
+Keys: c = calibrate or recalibrate (stand in guard), a/d = rotate the 3D view, q = quit.
 """
 import os
 import time
@@ -146,7 +146,25 @@ def draw_3d(world, vis, yaw, size=480, scale=250):
     return canvas
 
 
-def main():
+def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
+         on_features=None, on_draw=None, builtin_punches=True):
+    """Run the tracker. Run on its own it only draws; the callbacks let other code react.
+
+    on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
+    on_states(states): called every frame with the body-state labels active right now (BLOCK, DUCK,
+        SLIP LEFT, SLIP RIGHT, GUARD DOWN). It gets an empty list when nobody is in view.
+    on_frame(): called every frame; return True to stop the tracker.
+    want_calibrate(): called every frame; return True to calibrate now. This lets a hotkey recalibrate
+        while another window (the game) has focus. The c key in the camera window always works too.
+    on_calibrated(): called after a successful calibration.
+    on_features(now, speeds, travel, from_low): the raw numbers the punch decision uses, every frame.
+        speeds = [left, right] wrist speed; travel = 2x3 array of (extension, right, up) per hand;
+        from_low = [left, right] wrist started below the elbow. It may return a list of (side, kind)
+        punches it decided; those are shown on screen and passed to on_punch.
+    on_draw(frame): draw extra text on the camera image before it is shown.
+    builtin_punches: set False to switch off this file's own punch check, so only the punches
+        returned by on_features count (see punch_detector.py).
+    """
     ensure_model()
     landmarker = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=MODEL_PATH),
@@ -165,14 +183,22 @@ def main():
     cv2.moveWindow("3D skeleton", 700, 50)  # beside the camera window, not on top of it
     history = deque(maxlen=5)  # (time, wrist-relative-to-shoulder, wrist-below-elbow), ~0.2 s
     baseline = None
+    calibrated_at = -10.0  # when the last calibration happened, for the on-screen flash
     last_punch = {"L": 0.0, "R": 0.0}
     flash = {"L": ("", 0.0), "R": ("", 0.0)}
     t0 = time.time()
 
+    failed_reads = 0
     while True:
         ok, frame = cap.read()
-        if not ok:
-            break
+        if not ok or frame is None:
+            # Some webcams return empty frames for the first moment after opening. Wait before giving up.
+            failed_reads += 1
+            if failed_reads > 150:  # about 3 seconds of nothing
+                break
+            time.sleep(0.02)
+            continue
+        failed_reads = 0
         now = time.time()
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         result = landmarker.detect_for_video(
@@ -196,36 +222,66 @@ def main():
                 travel = punch_travel(delta, history[0][1], history[-1][1], world, sw)
                 for i, side in enumerate("LR"):
                     speeds[i] = np.linalg.norm(delta[i]) / dt
-                    if speeds[i] > PUNCH_SPEED and now - last_punch[side] > PUNCH_COOLDOWN:
+                    if builtin_punches and speeds[i] > PUNCH_SPEED and now - last_punch[side] > PUNCH_COOLDOWN:
                         kind = classify_punch(side, travel[i], history[0][2][i])
                         ext, right, up = travel[i]
                         print(f"{side} {kind} speed={speeds[i]:.1f} extension={ext:.2f} right={right:.2f} up={up:.2f} low={history[0][2][i]}")
                         if kind:
                             last_punch[side] = now
                             flash[side] = (f"{kind} {speeds[i]:.1f}", now)
+                            if on_punch:
+                                on_punch(kind, side, speeds[i])
+                if on_features:
+                    for side, kind in on_features(now, list(speeds), travel, list(history[0][2])) or ():
+                        flash[side] = (kind, now)
+                        if on_punch:
+                            on_punch(kind, side, speeds["LR".index(side)])
 
-            lines = [" | ".join(body_state(img, world, sw, baseline)) or "ok",
+            states = body_state(img, world, sw, baseline)
+            if on_states:
+                on_states(states)
+            lines = [" | ".join(states) or "ok",
                      f"speed L {speeds[0]:.1f}  R {speeds[1]:.1f}"]
             draw(frame, img, vis, flash, now)
             cv2.imshow("3D skeleton", draw_3d(world, vis, yaw))
         else:
             cv2.imshow("3D skeleton", np.zeros((480, 480, 3), np.uint8))
+            if on_states:
+                on_states([])  # nobody in view: let go of any held keys
 
         for n, text in enumerate(lines):
             cv2.putText(frame, text, (10, 30 + 30 * n), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
         if baseline is None:
-            cv2.putText(frame, "press C to calibrate", (10, frame.shape[0] - 15),
+            cv2.putText(frame, "stand in guard, then press C to calibrate", (10, frame.shape[0] - 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        else:
+            if now - calibrated_at < 1.5:
+                cv2.putText(frame, "CALIBRATED", (10, frame.shape[0] - 45),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 3)
+            cv2.putText(frame, "C = recalibrate", (10, frame.shape[0] - 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+        if on_draw:
+            on_draw(frame)
         cv2.imshow("Pose", frame)
+        if on_frame and on_frame():
+            break
         key = cv2.waitKey(1) & 0xFF
-        if key == ord("c") and result.pose_landmarks:
+        calibrate = key == ord("c") or bool(want_calibrate and want_calibrate())
+        if calibrate and result.pose_landmarks:
             baseline = {"nose": img[NOSE].copy(), "sw": np.linalg.norm(img[L_SH] - img[R_SH])}
+            calibrated_at = now
             print("Calibrated")
+            if on_calibrated:
+                on_calibrated()
+        elif calibrate:
+            print("Calibration skipped: no body in view")
         elif key in (ord("a"), ord("d")):
             yaw += 0.15 if key == ord("d") else -0.15
         elif key == ord("q"):
             break
 
+    if on_states:
+        on_states([])
     cap.release()
     cv2.destroyAllWindows()
 
