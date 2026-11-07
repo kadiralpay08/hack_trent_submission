@@ -66,7 +66,11 @@ class LiveSensors:
         self.last_sample_wall = 0.0
         self.samples_seen = 0
         self._pending_pose = None
-        self.receiver = glove_receiver.GloveReceiver(port=port, on_sample=self._on_sample)
+        try:
+            self.receiver = glove_receiver.GloveReceiver(port=port, on_sample=self._on_sample)
+        except OSError:
+            raise SystemExit(f"Cannot listen for the glove on UDP port {port}: another program already is. Close the "
+                             "other punch tool (punch_tune, punch_capture, punch_live, glove_check or controller) first.")
         self.sim_stop = None
         if simulate:
             import punch_sim

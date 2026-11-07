@@ -40,7 +40,7 @@ Defence keys: block `W`, duck `S`, slip left `A`, slip right `D`. These are in `
 
 ## Training data
 
-Record **100 jabs, 100 left hooks and 100 left uppercuts**. For each one: press and hold the button on the glove, punch, then release. One press is one labelled block.
+Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.py`. By default the screen calls each punch with a beep, in random order. The strongest punch in the next 1.6 s gets that label. Movement caught between prompts, plus a "MOVE, DON'T PUNCH" round every 15 prompts, is saved as **NONE** (not a punch), so the model learns to press nothing for guard adjustments and feints. The original button mode is still available as `--button`: hold, punch, release.
 
 ## Decisions
 
@@ -54,6 +54,8 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts**. For each one: press 
 | Button state travels in the frame's second sync byte: `A5 5A` released, `A5 5B` pressed | Every frame carries it, so a lost packet can't lose a press, and firmware without a button still works |
 | Deceleration only ends a punch once the arm settles | Uppercuts and hooks reverse direction mid-punch, and a reversal also looks like high deceleration |
 | Calibration waits 5 seconds after C or F7, with an on-screen countdown | Design rule: gives the boxer time to get into guard, or to click back into the game, before the stance is recorded. Applies to every tool built on `pose_tracker.py`, through `CALIBRATE_DELAY_S` |
+| Training is prompted by a timer, not the button (2026-11-07) | Holding a button changes your grip and fist compared with play, and the timer naturally collects not-a-punch examples. The button stays as `--button` |
+| A fourth class, NONE, for movement that isn't a punch | Anything the punch finder catches reaches the model in play. Without NONE, every guard adjustment would become a jab, hook or uppercut |
 | Low-confidence predictions press no key | The model only knows three classes, so other movement must not be forced into one of them |
 | Separate live script, `controller.py` left unchanged | Keeps Kadir's rule-based controller as a demo fallback |
 

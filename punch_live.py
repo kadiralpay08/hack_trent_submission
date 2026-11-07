@@ -6,7 +6,8 @@
 
 Punches (glove and camera together, via the model from punch_train.py): JAB = J, HOOK = H, UPPERCUT = U.
 Defence (camera only, as in controller.py): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D.
-Keys come from mappings/browser_boxing.json. A punch the model is unsure about presses nothing.
+Keys come from mappings/browser_boxing.json. Movement the model calls NONE (not a punch), and any punch
+it is unsure about, presses nothing.
 
 Hotkeys work from any window: F7 calibrate (5 s countdown to get into guard; needed for duck and slip), F8 key output
 on or off (with --live it starts OFF), F9 quit.
@@ -52,6 +53,10 @@ class LivePlay:
         self.count += 1
         delay = 1000 * (time.time() - seen_at)
         timing = f"{1000 * seg.duration:.0f} ms punch ({'stopped' if seg.reason == 'decel' else 'timeout'}), +{delay:.0f} ms to decide"
+        if label == "NONE":
+            self.show(f"not a punch ({100 * conf:.0f}%): no key", GREY)
+            self.log(f"movement {self.count}: not a punch {100 * conf:.0f}% | {timing}")
+            return
         if label is None or conf < self.clf.min_confidence:
             self.show(f"unsure ({label} {100 * conf:.0f}%): no key", ORANGE)
             self.log(f"punch {self.count}: unsure, best guess {label} {100 * conf:.0f}% | {timing}")
@@ -87,6 +92,7 @@ def main():
     parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "browser_boxing.json"))
     parser.add_argument("--simulate", action="store_true", help="fake glove (no hardware)")
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
     args = parser.parse_args()
 
@@ -106,7 +112,7 @@ def main():
     game = game_input.GameInput(mapping, keyboard)
     game.set_enabled(not args.live)  # a dry run is harmless, so it starts on; live starts off
 
-    sensors = ps.LiveSensors(clf.segment, simulate=args.simulate)
+    sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=args.port)
     play = LivePlay(sensors, clf, game)
 
     # Defence keys, calibration and the F7/F8/F9 hotkeys come from controller.py; punches come from the model.

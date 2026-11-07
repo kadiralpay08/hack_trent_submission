@@ -67,7 +67,7 @@ class Tuner:
 
     # --- typed commands ---
     def command(self, line):
-        line = line.strip().lstrip("﻿")  # PowerShell can prefix piped text with a byte-order mark
+        line = line.strip().lstrip("ï»¿")  # PowerShell can prefix piped text with a byte-order mark
         if not line:
             return
         settings = self.sensors.settings.to_dict()
@@ -222,11 +222,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--simulate", action="store_true", help="use a fake glove (no hardware)")
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
     args = parser.parse_args()
 
     config = ps.load_config()
-    sensors = ps.LiveSensors(config["segment"], seconds=150, simulate=args.simulate)  # room for a 2-minute test
+    sensors = ps.LiveSensors(config["segment"], seconds=150, simulate=args.simulate, port=args.port)  # room for a 2-minute test
     tuner = Tuner(sensors, config)
     if tuner.classifier:
         print(f"Model loaded (trained {tuner.classifier.info['trained_at']}), so timed tests classify punches.")
