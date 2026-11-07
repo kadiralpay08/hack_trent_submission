@@ -1,0 +1,1 @@
+I see that its opening the opencv pose estimator and prompting me to punch for training data, we still dont have the code  that reads the button input made or uploaded to the esp32, so you need to do that too
