@@ -9,7 +9,7 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch e
 |---|---|---|
 | 1. Check the glove | `python glove_check.py`, then `python glove_receiver.py` | Confirms data arrives. The receiver also shows whether the button reads `HELD` |
 | 2. Pick the timeout | `python punch_tune.py` | Type a timeout in ms in the terminal and watch each punch's start and end on the camera window. `test 10 60 jab` runs a timed test and compares timeouts. Type `save` to keep the settings |
-| 3. Record | `python punch_capture.py` | Hold the glove button, throw one punch, release. Records 100 each of jab, hook and uppercut. Data stays in `punch_data/` |
+| 3. Record | `python punch_capture.py --person <name>` | The screen calls JAB, HOOK or UPPERCUT with a beep, in random order. Throw that punch. Records 100 of each, plus NONE (not a punch) examples from movement between prompts. `--target 20` makes a smaller set. `--button` uses the glove button instead. Data stays in `punch_data/` |
 | 4. Train | `python punch_train.py` | Trains the random forest and reports glove-only, camera-only and combined accuracy. Saves `models/punch_rf.joblib` |
 | 5. Play | `python punch_live.py --live` | J jab, H hook, U uppercut, plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit |
 

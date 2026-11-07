@@ -113,7 +113,15 @@ def main(argv=None):
             print(f"  skipped {n}: {why}")
         return 1
     counts = Counter(y)
-    print(f"{len(y)} punches from {len(set(groups))} session(s): " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
+    print(f"{len(y)} blocks from {len(set(groups))} session(s): " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
+    few = sorted(k for k, n in counts.items() if n < 5)
+    if few:
+        print(f"  left out of training (fewer than 5 examples): {', '.join(few)}")
+        keep = ~np.isin(y, few)
+        X, y, groups = X[keep], y[keep], groups[keep]
+        counts = Counter(y)
+    if "NONE" not in counts:
+        print("  no NONE examples yet, so every movement it catches will be called a punch")
     for why, n in skipped.items():
         print(f"  skipped {n} block(s): {why}")
     pose_seen = float(np.mean(X[:, names.index("pose_frames")] >= 3))
