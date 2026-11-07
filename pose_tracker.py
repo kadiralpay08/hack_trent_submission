@@ -40,6 +40,12 @@ MIN_TRAVEL = 0.4        # wrist travel (shoulder-widths) needed to call a punch 
 PUNCH_COOLDOWN = 0.25   # seconds
 LEAD = "L"              # lead hand throws the jab (orthodox = "L")
 CALIBRATE_DELAY_S = 5.0  # seconds from pressing C (or F7) to calibrating, to get into guard first
+BOTTOM_RESERVED = 70     # pixels at the bottom of the camera image kept for the calibration messages
+
+
+def set_fullscreen(on, window="Pose"):
+    """Switch the camera window between full screen and a normal window."""
+    cv2.setWindowProperty(window, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN if on else cv2.WINDOW_NORMAL)
 
 
 def ensure_model():
@@ -171,7 +177,7 @@ def fit_window(name, frame_w, frame_h):
 
 def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
          on_features=None, on_draw=None, builtin_punches=True, camera_index=0, on_pose=None,
-         big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY_S):
+         big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY_S, fullscreen=False):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
@@ -193,9 +199,13 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     camera_index: which camera to open (0 is the default webcam).
     on_pose(world, visibility): called every frame a body is found, with the 33 smoothed 3D world
         landmarks (metres, origin at the hips) and how visible each one is.
-    big_window: open the camera window as large as the screen allows, for reading from across the room.
+    big_window: size the camera window as large as the screen allows, for reading from across the room.
+        Ignored when fullscreen is on.
     show_3d: set False to skip the 3D skeleton window.
     calibrate_delay: seconds to wait between a calibrate request and the calibration itself (0 = at once).
+    fullscreen: show the camera window full screen. set_fullscreen() switches it while running.
+    Layout: this function draws its calibration messages in the bottom BOTTOM_RESERVED pixels of the
+    camera image; on_draw should keep its own text above that, so nothing covers them.
     """
     ensure_model()
     landmarker = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
@@ -211,12 +221,13 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
 
     smooth_img, smooth_world = Smoother(0.6), Smoother(0.7)
     yaw = 0.0  # 3D view rotation
+    cv2.namedWindow("Pose", cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # resizable, so it can go full screen
+    if fullscreen:
+        set_fullscreen(True)
     if show_3d:
         cv2.namedWindow("3D skeleton")
         cv2.moveWindow("3D skeleton", 700, 50)  # beside the camera window, not on top of it
-    if big_window:
-        cv2.namedWindow("Pose", cv2.WINDOW_NORMAL)
-    sized = False  # the big window is sized once the first frame shows the camera's resolution
+    sized = fullscreen or not big_window  # the big window is sized once the first frame shows the camera's resolution
     history = deque(maxlen=5)  # (time, wrist-relative-to-shoulder, wrist-below-elbow), ~0.2 s
     baseline = None
     calibrated_at = -10.0  # when the last calibration happened, for the on-screen flash
@@ -311,7 +322,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
         if on_draw:
             on_draw(frame)
         cv2.imshow("Pose", frame)
-        if big_window and not sized:
+        if not sized:
             fit_window("Pose", frame.shape[1], frame.shape[0])
             sized = True
         if on_frame and on_frame():

@@ -11,7 +11,11 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch e
 | 2. Pick the timeout | `python punch_tune.py` | Type a timeout in ms in the terminal and watch each punch's start and end on the camera window. `test 10 60 jab` runs a timed test and compares timeouts. Type `save` to keep the settings |
 | 3. Record | `python punch_capture.py --person <name>` | The screen calls JAB, HOOK or UPPERCUT with a beep, in random order. Throw that punch. Records 100 of each, plus NONE (not a punch) examples from movement between prompts. `--target 20` makes a smaller set. `--button` uses the glove button instead. Data stays in `punch_data/` |
 | 4. Train | `python punch_train.py` | Trains the random forest and reports glove-only, camera-only and combined accuracy. Saves `models/punch_rf.joblib` |
-| 5. Play | `python punch_live.py --live` | J jab, H hook, U uppercut, plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit |
+| 5. Play | `python punch_live.py --live` | J jab, H hook, U uppercut, plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit. **[** and **]** lower or raise the confidence cutoff while playing, with no retraining. `--confidence 0.7` and `--start-g 3` set the cutoff and the punch threshold at startup |
+
+The camera tools open full screen. **F11** switches to a window and back, so you can reach the terminal, and `--windowed` starts in a window. Timed sessions never start on their own: calibrate with **C** (a 5-second countdown into guard), then press **.** (full stop, from any window) to start. Press **.** again to pause or resume. This covers the tuner's `test` and the capture session.
+
+To change a setting without opening a tool, run `python punch_settings.py timeout 300` (any value from 100 to 1500 ms), `python punch_settings.py confidence 0.7`, or `python punch_settings.py` to show them all. Retrain after changing the timeout.
 
 On a machine where `python` is not the project's Python, you get `No module named cv2`. Put `.\run.bat` in front instead, for example `.\run.bat punch_capture.py` or `.\run.bat punch_train.py`. It runs the script with the project's `.venv` and needs no activation. For step 5, `.\play.bat` is the same as `punch_live.py` (dry run), and `.\play.bat --live` presses keys.
 
