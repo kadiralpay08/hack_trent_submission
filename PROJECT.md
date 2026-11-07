@@ -61,6 +61,7 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | A second arm is optional and fully separate (2026-11-07) | The right glove uses port 5006, its own data folder, model and punches (CROSS, HOOK, UPPERCUT), selected with `--arm right`. The left arm keeps its original data and model, and stays the default. Camera features are mirrored for the right arm |
 | The glove sends to one laptop's address, not broadcast (2026-11-07) | Broadcast over the phone hotspot lost about a third of the samples, in gaps of up to about 350 ms, enough to swallow a whole punch. Sending to one address gets WiFi's automatic re-sends. To use another computer, flash its address |
 | Separate live script, `controller.py` left unchanged | Keeps Kadir's rule-based controller as a demo fallback |
+| A phone can be the right arm's sensor instead of a glove (2026-11-07) | The phyphox app serves the phone's accelerometer and gyroscope and the laptop polls it (`phyphox_imu.py`). It is chosen with `--phone ADDRESS` together with `--arm right` in `punch_capture.py`, `punch_tune.py` and `punch_live.py`, or `--right-phone` in `punch_live_both.py`, and is refused for the left arm so the left glove's recordings and model can't be mixed with it. Polling means nothing has to connect into the laptop: in testing, a phone's connection into the laptop never arrived (from a teammate's hotspot or an iPhone's own), while the laptop reaching the phone worked. The right arm's recordings, model and punches stay as for the right glove. A phone has no magnetometer and reports about 80 to 100 Hz against a glove's 500 Hz. Capture's "enough data" check used to assume 500 Hz and rejected every phone recording as dropped packets (shown as MISSED); it now scales with the sensor's measured rate (`LiveSensors.sample_rate_hz`). A browser-page alternative (`phone_imu.py`) is kept but did not work in that test |
 
 ## Code map
 
@@ -81,6 +82,8 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | `tests/test_punch_pipeline.py` | Run with `python -m unittest discover tests` |
 
 **Status (2026-11-07):** all of the above is built and tested on simulated data. The firmware compiles but hasn't been flashed. Nothing has been tested on real punches yet.
+
+**Right arm from a phone:** `phyphox_imu.py` polls the phyphox app and plugs into `LiveSensors` through `--phone` (with `--arm right`). The receiver has run on a real phone (about 80 to 100 Hz). 60 right-arm punches (20 each of CROSS, HOOK and UPPERCUT) were recorded with it, and `models/punch_rf_right.joblib` was trained on them: 98% cross-validated, but from one session, so optimistic. It has no NONE (not a punch) examples yet and has not been tried live. `phone_imu.py` with `phone/index.html` is a browser-page alternative that did not work (see the decision above).
 
 **Shared parts:** `glove_receiver.py`, `pose_tracker.py`, `game_input.py`, `firmware/glove_imu/` (the left glove, ESP32-CAM). `firmware/glove_imu_s3/` is an ESP32-S3 glove for either arm, and `firmware/mpu6050_usb_check/` and `firmware/mpu9250_usb_check/` check whether a sensor is alive over USB.
 

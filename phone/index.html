@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Right hand sensor</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; background: #111; color: #eee; text-align: center; }
+  button { font-size: 1.6rem; padding: 1rem 2.5rem; border: 0; border-radius: 12px; background: #2e7d32; color: #fff; }
+  #status { margin: 1.2rem 0; font-size: 1.25rem; }
+  .good { color: #6bff95; }
+  .bad { color: #ff6b6b; }
+  pre { display: inline-block; text-align: left; font-size: 1rem; }
+</style>
+</head>
+<body>
+<h1>Right hand sensor</h1>
+<button id="go">Start</button>
+<div id="status">Tap Start, then allow motion access.</div>
+<pre id="live"></pre>
+<script>
+// Sends the phone's accelerometer and gyroscope to the laptop, in small batches.
+// Each sample is [time ms, ax, ay, az, gx, gy, gz]. Acceleration includes gravity (the browser reports m/s^2,
+// the laptop converts to g) and rotation is in deg/s. gx, gy, gz are the browser's beta, gamma, alpha, which
+// turn about the x, y and z axes.
+const FLUSH_MS = 50;      // how often a batch goes to the laptop
+const KEEP = 600;         // samples kept if the laptop can't be reached, so memory can't grow without limit
+
+const go = document.getElementById("go");
+const statusEl = document.getElementById("status");
+const live = document.getElementById("live");
+
+let buffer = [];
+let inFlight = false;
+let sent = 0, failedBatches = 0, events = 0;
+let lastEventAt = 0, lastRateAt = performance.now(), lastRateEvents = 0, rate = 0;
+let last = null;
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls || "";
+}
+
+async function start() {
+  if (typeof DeviceMotionEvent === "undefined") {
+    setStatus("This browser has no motion sensors.", "bad");
+    return;
+  }
+  if (typeof DeviceMotionEvent.requestPermission === "function") {  // iPhone: must be asked, from a tap
+    try {
+      if ((await DeviceMotionEvent.requestPermission()) !== "granted") {
+        setStatus("Motion access was denied. Close this tab, open the page again and tap Allow.", "bad");
+        return;
+      }
+    } catch (e) {
+      setStatus("Could not ask for motion access: " + e, "bad");
+      return;
+    }
+  }
+  window.addEventListener("devicemotion", onMotion);
+  try { await navigator.wakeLock.request("screen"); } catch (e) { /* keep the screen on by hand */ }
+  go.style.display = "none";
+  setInterval(flush, FLUSH_MS);
+  setInterval(refresh, 500);
+  setStatus("Starting...");
+}
+
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity, r = e.rotationRate;
+  if (!a || !r || a.x === null || r.alpha === null) return;
+  events++;
+  lastEventAt = performance.now();
+  last = [a.x, a.y, a.z, r.beta, r.gamma, r.alpha];
+  buffer.push([e.timeStamp, ...last]);
+  if (buffer.length > KEEP) buffer.splice(0, buffer.length - KEEP);
+}
+
+async function flush() {
+  if (inFlight || buffer.length === 0) return;
+  const batch = buffer;
+  buffer = [];
+  inFlight = true;
+  try {
+    const res = await fetch("/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ samples: batch }),
+    });
+    if (!res.ok) throw new Error("laptop said " + res.status);
+    sent += batch.length;
+    failedBatches = 0;
+  } catch (e) {
+    failedBatches++;
+    buffer = batch.concat(buffer).slice(-KEEP);
+  }
+  inFlight = false;
+}
+
+function refresh() {
+  const now = performance.now();
+  rate = (events - lastRateEvents) * 1000 / (now - lastRateAt);
+  lastRateAt = now;
+  lastRateEvents = events;
+  if (now - lastEventAt > 2000) {
+    setStatus("No motion data. Keep this page open and the screen on, and check motion access is allowed.", "bad");
+  } else if (failedBatches > 3) {
+    setStatus("Cannot reach the laptop. Same WiFi? Is the laptop program still running?", "bad");
+  } else {
+    setStatus("Sending to the laptop", "good");
+  }
+  const f = (v) => (v === undefined || v === null ? "-" : v.toFixed(2).padStart(7));
+  live.textContent =
+    "rate     " + rate.toFixed(0) + " Hz\n" +
+    "sent     " + sent + "\n" +
+    "accel    " + (last ? last.slice(0, 3).map(f).join("") : "-") + "\n" +
+    "gyro     " + (last ? last.slice(3).map(f).join("") : "-");
+}
+
+go.addEventListener("click", start);
+</script>
+</body>
+</html>
