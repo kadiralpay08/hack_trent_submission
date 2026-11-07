@@ -176,10 +176,17 @@ def main(on_punch=None, on_states=None, on_frame=None):
     flash = {"L": ("", 0.0), "R": ("", 0.0)}
     t0 = time.time()
 
+    failed_reads = 0
     while True:
         ok, frame = cap.read()
-        if not ok:
-            break
+        if not ok or frame is None:
+            # Some webcams return empty frames for the first moment after opening. Wait before giving up.
+            failed_reads += 1
+            if failed_reads > 150:  # about 3 seconds of nothing
+                break
+            time.sleep(0.02)
+            continue
+        failed_reads = 0
         now = time.time()
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         result = landmarker.detect_for_video(
