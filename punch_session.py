@@ -65,6 +65,20 @@ def add_arm_argument(parser):
                         help="which glove: left (ESP32-CAM, port 5005) or right (ESP32-S3, port 5006)")
 
 
+def add_phone_argument(parser):
+    parser.add_argument("--phone", metavar="ADDRESS",
+                        help="use a phone running phyphox (remote access on) as the right arm's sensor instead of a "
+                             "glove: the address it shows, e.g. 172.20.10.1. Only with --arm right")
+
+
+def phone_for(args):
+    """args.phone, once checked to be for the right arm only, so a phone's recordings and model can never be mixed
+    into the left glove's."""
+    if args.phone and args.arm != "right":
+        raise SystemExit("--phone is only for the right arm: add --arm right.")
+    return args.phone
+
+
 # --- settings -----------------------------------------------------------------------------------------
 def load_config(path=CONFIG_PATH):
     data = {}
@@ -95,7 +109,7 @@ class LiveSensors:
     Wire the camera in with pose_callbacks().
     """
 
-    def __init__(self, settings, seconds=30, simulate=False, port=glove_receiver.PORT, arm=None):
+    def __init__(self, settings, seconds=30, simulate=False, port=glove_receiver.PORT, arm=None, phone=None):
         self.lock = threading.Lock()
         # (t, t_us, ax, ay, az, gx, gy, gz, button, mx, my, mz, mag_ok); mag is 0 and not ok without one
         self.imu = deque(maxlen=int(seconds * 600))
@@ -107,12 +121,21 @@ class LiveSensors:
         self.last_sample_wall = 0.0
         self.samples_seen = 0
         self._pending_pose = None
+        self.sim_stop = None
+        if phone:  # a phone running phyphox, polled over WiFi, instead of a glove sending UDP
+            if simulate:
+                raise SystemExit("--phone and --simulate can't be used together.")
+            import phyphox_imu
+            try:
+                self.receiver = phyphox_imu.open_receiver(phone, on_sample=self._on_sample, interval=0.05)
+            except RuntimeError as error:
+                raise SystemExit(str(error))
+            return
         try:
             self.receiver = glove_receiver.GloveReceiver(port=port, on_sample=self._on_sample)
         except OSError:
             raise SystemExit(f"Cannot listen for the glove on UDP port {port}: another program already is. Close the "
                              "other punch tool (punch_tune, punch_capture, punch_live, glove_check or controller) first.")
-        self.sim_stop = None
         if simulate:
             import punch_sim
             arm = arm or ARMS["left"]
@@ -156,6 +179,17 @@ class LiveSensors:
         with self.lock:
             return self.imu[-1][0] if self.imu else None
 
+    def sample_rate_hz(self, default=500.0, recent=300):
+        """How fast samples really arrive, from the typical gap between the latest few: about 500 for the glove,
+        about 100 for a phone. Checks for "enough data" scale with this, so they catch gaps in the data and not
+        a sensor that is simply slower than the glove. Uses the median gap, so a few dropped packets don't count."""
+        with self.lock:
+            times = [r[0] for r in itertools.islice(reversed(self.imu), recent)]  # newest first
+        if len(times) < 20:
+            return default
+        step = float(np.median(-np.diff(times)))
+        return 1.0 / step if step > 0 else default
+
     # camera side
     def pose_callbacks(self):
         def on_pose(world, visibility):
@@ -198,6 +232,8 @@ class LiveSensors:
     def close(self):
         if self.sim_stop:
             self.sim_stop.set()
+        if hasattr(self.receiver, "stop"):  # a phyphox receiver has a polling thread to stop
+            self.receiver.close()
 
 
 def shared_pose_callbacks(*sensors):

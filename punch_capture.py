@@ -112,7 +112,9 @@ class Capture:
         imu, pose = self.sensors.window(t0 - PRE_S, t1 + POST_S)
         settings = self.sensors.settings
         problem, segment, found, gravity = None, None, 0, None
-        if len(imu["t"]) < 0.6 * 500 * (t1 - t0 + PRE_S + POST_S):
+        # At least 60% of the samples the sensor normally sends: its real rate (about 500 Hz for the glove, about
+        # 100 Hz for a phone), so a slower sensor is not mistaken for dropped packets.
+        if len(imu["t"]) < 0.6 * self.sensors.sample_rate_hz() * (t1 - t0 + PRE_S + POST_S):
             problem = "too little glove data arrived (WiFi dropping?)"
         else:
             gravity = self.sensors.gravity_at(imu["t"][0])
@@ -366,6 +368,7 @@ def main():
     parser.add_argument("--person", default="", help="who is punching (saved with each block)")
     parser.add_argument("--button", action="store_true", help="hold the glove button around each punch")
     ps.add_arm_argument(parser)
+    ps.add_phone_argument(parser)
     parser.add_argument("--data", help="where to save blocks (default: the arm's folder, punch_data or punch_data_right)")
     parser.add_argument("--simulate", action="store_true", help="fake glove (no hardware)")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
@@ -377,10 +380,11 @@ def main():
     args.data, args.port = args.data or arm.data_dir, args.port or arm.port
 
     config = ps.load_config()
-    sensors = ps.LiveSensors(config["segment"], simulate=args.simulate, port=args.port, arm=arm)
+    sensors = ps.LiveSensors(config["segment"], simulate=args.simulate, port=args.port, arm=arm, phone=ps.phone_for(args))
     cls = ButtonCapture if args.button else PromptedCapture
     cap = cls(sensors, config, args.target, args.data, args.person, arm)
-    print(f"{arm.name.upper()} ARM: punches {', '.join(arm.labels)}, glove on port {args.port}")
+    source = f"phone at {args.phone}" if args.phone else f"glove on port {args.port}"
+    print(f"{arm.name.upper()} ARM: punches {', '.join(arm.labels)}, {source}")
     print("Recording to", os.path.abspath(args.data), "| already have:", cap.counts)
     print(cap.HELP)
     threading.Thread(target=cap.read_terminal, daemon=True).start()

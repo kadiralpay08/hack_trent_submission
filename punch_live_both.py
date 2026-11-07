@@ -30,6 +30,8 @@ def main():
     parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "controls.json"),
                         help="controls file (edit it with controls_editor.py)")
     parser.add_argument("--simulate", action="store_true", help="fake gloves on both arms (no hardware)")
+    parser.add_argument("--right-phone", metavar="ADDRESS", help="use a phone running phyphox (remote access on) as the "
+                        "right arm's sensor instead of a glove on port 5006: the address it shows")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--confidence", type=float, help="how sure a model must be to press a key, 0 to 1")
@@ -51,11 +53,13 @@ def main():
                   f"Record with punch_capture.py --arm {name}, then punch_train.py --arm {name}.")
             continue
         clf = ps.Classifier(arm.model_path, args.confidence)
-        sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=arm.port, arm=arm)
+        phone = args.right_phone if name == "right" else None
+        sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=arm.port, arm=arm, phone=phone)
         play = punch_live.LivePlay(sensors, clf, game, name=f"{name.upper()}: ", x=x, scale=0.65, footer=not arms)
         arms.append((arm, sensors, play))
         print(f"{name} arm: model trained {clf.info['trained_at']} on {clf.info['counts']}, "
-              f"timeout {1000 * clf.segment.timeout_s:.0f} ms, glove on port {arm.port}")
+              f"timeout {1000 * clf.segment.timeout_s:.0f} ms, "
+              + (f"phone at {phone}" if phone else f"glove on port {arm.port}"))
     if not arms:
         return 1
 

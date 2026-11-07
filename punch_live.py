@@ -168,6 +168,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--live", action="store_true", help="really press keys (default: only print them)")
     ps.add_arm_argument(parser)
+    ps.add_phone_argument(parser)
     parser.add_argument("--model", help="trained model (default: the arm's model file)")
     parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "controls.json"),
                         help="controls file (edit it with controls_editor.py; saved changes apply live)")
@@ -211,7 +212,7 @@ def main():
     game = game_input.GameInput(mapping, keyboard)
     game.set_enabled(not args.live)  # a dry run is harmless, so it starts on; live starts off
 
-    sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=args.port, arm=arm)
+    sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=args.port, arm=arm, phone=ps.phone_for(args))
     play = LivePlay(sensors, clf, game)
     tracking = None
     if not args.no_tracking:

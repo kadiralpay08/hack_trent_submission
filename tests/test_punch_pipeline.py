@@ -275,6 +275,9 @@ class FakeSensors:
     def latest_imu_t(self):
         return self.now_t
 
+    def sample_rate_hz(self):
+        return 500.0
+
 
 class StartAndPause(unittest.TestCase):
     def test_tuner_test_waits_for_calibration_and_pauses(self):
