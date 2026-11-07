@@ -1,0 +1,17 @@
+claude import the necessary packagess
+
+---
+
+give a summary of all the files
+
+---
+
+you forgot some packages for pose tracker
+
+---
+
+ModuleNotFoundError: No module named 'cv2'
+
+---
+
+can you push everything to the main
