@@ -37,6 +37,16 @@ class Settings:
     early_inward: float = 1.2   # ...hook: sideways travel needed to be sure
     early_up: float = 1.2       # ...uppercut: upward travel needed to be sure
     early_ratio: float = 1.3    # ...and the winning direction must beat the other by this factor
+    lead: str = "L"             # the hand that throws the jab ("L" for orthodox, "R" for southpaw)
+
+    @classmethod
+    def from_dict(cls, values):
+        """Build settings from a dict (such as a JSON file). A misspelt name is an error, not ignored."""
+        known = set(cls.__dataclass_fields__)
+        unknown = sorted(k for k in values if k not in known and not k.startswith("_"))
+        if unknown:
+            raise ValueError(f"unknown punch setting(s) {unknown}; known settings: {sorted(known)}")
+        return cls(**{k: v for k, v in values.items() if k in known})
 
 
 class _Hand:
@@ -120,7 +130,7 @@ class PunchDetector:
         if h.inward >= s.min_inward and h.inward >= h.ext:
             return "HOOK"
         if s.straight_ext is not None and h.ext >= s.straight_ext:
-            return "JAB" if h.side == "L" else "CROSS"
+            return "JAB" if h.side == s.lead else "CROSS"
         return None
 
     # --- both hands ---
