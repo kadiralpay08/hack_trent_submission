@@ -15,9 +15,15 @@ cutoff down or up (both arms). Calibrate by pressing C in the camera window (5 s
 F7 also calibrates, but in a browser game F7 opens a dialog, so use C there.
 
 Each arm still trains on its own: python punch_train.py --arm left, then --arm right.
+
+The keybind window (controls_editor.py) opens beside it; saved changes apply straight away. --no-editor skips it.
+Tracking mode: hold the LEFT glove's button and your right hand (camera) steers the mouse; punches then use the
+tracking set of keys. --no-tracking turns it off.
 """
 import argparse
 import os
+import subprocess
+import sys
 import time
 
 import punch_live
@@ -36,6 +42,8 @@ def main():
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--confidence", type=float, help="how sure a model must be to press a key, 0 to 1")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
+    parser.add_argument("--no-editor", action="store_true", help="don't open the keybind window")
+    parser.add_argument("--no-tracking", action="store_true", help="ignore the glove button: no mouse steering")
     args = parser.parse_args()
 
     import controller
@@ -63,6 +71,16 @@ def main():
     if not arms:
         return 1
 
+    tracking = None
+    left = next((s for a, s, _ in arms if a.name == "left"), None)
+    if left is not None and not args.no_tracking:  # the button is on the left glove
+        import hand_aim
+        tracking = hand_aim.Tracking(left, game)
+    watcher = punch_live.ControlsWatcher(args.mapping)
+    editor = None
+    if not args.no_editor:
+        editor = subprocess.Popen([sys.executable, os.path.join(ps.ROOT, "controls_editor.py"), "--mapping", args.mapping])
+
     # Defence keys, calibration and F7/F8/F9 come from controller.py; punches come from the two models.
     callbacks = controller.make_callbacks(game, controller.Hotkeys(), detector=False)
     callbacks.pop("on_punch")
@@ -72,8 +90,16 @@ def main():
     started = time.time()
 
     def on_frame():
+        if tracking:
+            tracking.poll()  # before the punches, so one thrown with the button held uses the tracking set
         for _, _, play in arms:
             play.poll()
+        changed = watcher.poll()
+        if changed:
+            game.set_mapping(changed)
+            if tracking:
+                tracking.set_settings(changed.aim)
+            print("controls reloaded from " + os.path.basename(args.mapping))
         for vk, step in ((punch_live.VK_LOWER, -0.05), (punch_live.VK_RAISE, +0.05)):
             if sensitivity_keys.pressed(vk):
                 for _, _, play in arms:
@@ -84,6 +110,8 @@ def main():
     def on_draw(frame):
         for _, _, play in arms:
             play.on_draw(frame)
+        if tracking:
+            tracking.draw(frame, ps.put)
 
     callbacks.update(ps.shared_pose_callbacks(*[s for _, s, _ in arms]))  # one camera feeds both arms
     callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=not args.windowed,
@@ -96,9 +124,13 @@ def main():
     try:
         pose_tracker.main(**callbacks)
     finally:
+        if tracking:
+            tracking.close()
         game.close()
         for _, sensors, _ in arms:
             sensors.close()
+        if editor and editor.poll() is None:
+            editor.terminate()
     return 0
 
 

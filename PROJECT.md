@@ -88,7 +88,7 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | `punch_sim.py` | Fake glove data that follows the punch definitions. Used by `--simulate` and the tests. It shows the code runs, not that the model works on real punches |
 | `hand_aim.py` | Tracking mode: right-hand steering of the mouse while the glove button is held |
 | `controls_editor.py` | Keybind window for `mappings/controls.json` |
-| `punch_live_both.py` | Runs the left and right models side by side, with one camera |
+| `punch_live_both.py` | The final program: runs the left and right models side by side with one camera, opens the keybind window, and has tracking mode on the left glove's button |
 | `tests/test_punch_pipeline.py` | Run with `python -m unittest discover tests` |
 
 **Status (2026-11-07):** all of the above is built and tested on simulated data. The firmware compiles but hasn't been flashed. Nothing has been tested on real punches yet.

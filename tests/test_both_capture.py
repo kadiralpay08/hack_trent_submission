@@ -38,7 +38,7 @@ def make_capture(tmp, target=4, seed=1):
         rec = punch_capture.ArmRecorder(cap, FakeSensors(), ps.load_config(), target, os.path.join(tmp, name), "test", arm)
         rec.calls = []
 
-        def fake_save(label, t0, t1, quiet=False, extra=None, rec=rec):  # every punch "found"
+        def fake_save(label, t0, t1, quiet=False, extra=None, data_end=None, rec=rec):  # every punch "found"
             rec.calls.append((label, extra))
             rec.counts[label] = rec.counts.get(label, 0) + 1
             rec.saved.append((f"{label}{len(rec.saved)}", label))
@@ -128,6 +128,45 @@ class BothArms(unittest.TestCase):
             punch_capture.main(["--both", "--arm", "right"])
         with self.assertRaises(SystemExit):
             punch_capture.main(["--right-phone", "1.2.3.4"])
+
+
+class NoneThatRunsToTheTimeout(unittest.TestCase):
+    """Real NONE movements often last the whole punch timeout. Saving only 0.35 s after their start cut them off
+    before the punch finder saw them end, so they were rejected as "no punch found" (2026-11-07)."""
+
+    def test_long_none_movement_is_kept(self):
+        from types import SimpleNamespace
+        config = ps.load_config()
+        sensors = ps.LiveSensors(config["segment"], port=5012)
+        try:
+            rate, rng = 500, np.random.default_rng(5)
+            t = np.arange(int(5.0 * rate)) / rate
+            accel = np.tile([0.0, 0.0, 1.0], (len(t), 1)) + rng.normal(0, 0.01, (len(t), 3))
+            gyro = np.zeros((len(t), 3))
+            push = (t >= 3.0) & (t < 3.7)              # a long shove, longer than the 350 ms timeout
+            accel[push, 0] += 3.5
+            for k in range(len(t)):
+                sensors._on_sample(None, SimpleNamespace(t=float(t[k]), t_us=int(t[k] * 1e6), accel=accel[k],
+                                                         gyro=gyro[k], button=False, mag=None, mag_ok=False))
+            seg = None
+            while not sensors.events.empty():
+                kind, value = sensors.events.get()
+                if kind == "end":
+                    seg = value
+            self.assertIsNotNone(seg)
+            self.assertGreaterEqual(seg.end_t - seg.start_t, config["segment"].timeout_s - 0.01)
+            with tempfile.TemporaryDirectory() as tmp:
+                cap = punch_capture.PromptedCapture(sensors, config, 5, tmp, "test")
+                cap.say = lambda *a, **k: None
+                short = cap.save_block("NONE", seg.start_t - 0.05, seg.start_t + 0.05, quiet=True)
+                self.assertIsNone(short)                           # the old way: cut off, rejected
+                kept = cap.save_block("NONE", seg.start_t - 0.05, seg.start_t + 0.05, quiet=True, data_end=seg.end_t)
+                self.assertIsNotNone(kept)                         # the fix: saved
+                import punch_train
+                X, y, *_ = punch_train.build_dataset(tmp, config, quiet=True)
+                self.assertEqual(list(y), ["NONE"])                # and training can use it
+        finally:
+            sensors.close()
 
 
 class SharpText(unittest.TestCase):

@@ -135,15 +135,18 @@ class Capture:
         self.say(f"discarded this session ({n} recordings). Bring it back with: "
                  f"python punch_sessions.py --restore {self.session}", ORANGE)
 
-    def save_block(self, label, t0, t1, quiet=False, extra=None):
+    def save_block(self, label, t0, t1, quiet=False, extra=None, data_end=None):
         """Check and save the data around [t0, t1] as one block. Returns the punch Segment or None.
         extra is added to the block's meta (two-arm mode records the combo it came from)."""
-        imu, pose = self.sensors.window(t0 - PRE_S, t1 + POST_S)
+        # data_end: keep data up to here too. A NONE example's time range is just around where the movement
+        # started, but the punch finder needs to see it finish, or it finds nothing in the saved slice.
+        end = max(t1, data_end or t1) + POST_S
+        imu, pose = self.sensors.window(t0 - PRE_S, end)
         settings = self.sensors.settings
         problem, segment, found, gravity = None, None, 0, None
         # At least 60% of the samples the sensor normally sends: its real rate (about 500 Hz for the glove, about
         # 100 Hz for a phone), so a slower sensor is not mistaken for dropped packets.
-        if len(imu["t"]) < 0.6 * self.sensors.sample_rate_hz() * (t1 - t0 + PRE_S + POST_S):
+        if len(imu["t"]) < 0.6 * self.sensors.sample_rate_hz() * (end - t0 + PRE_S):
             problem = "too little glove data arrived (WiFi dropping?)"
         else:
             gravity = self.sensors.gravity_at(imu["t"][0])
@@ -348,7 +351,7 @@ class PromptedCapture(Capture):
                          f"{seg.peak_g:.1f} g", GREEN)
         for seg in [s for s in self.none_pending if latest >= s.end_t + POST_S]:
             self.none_pending.remove(seg)
-            if self.save_block(NONE, seg.start_t - 0.05, seg.start_t + 0.05, quiet=True) is not None:
+            if self.save_block(NONE, seg.start_t - 0.05, seg.start_t + 0.05, quiet=True, data_end=seg.end_t) is not None:
                 where = "while moving freely" if any(a <= seg.start_t <= b for a, b in self.free) or self.phase == "free" else "between prompts"
                 print(f"saved NONE {self.counts[NONE]} (a movement {where})")
         return self.quit or self.phase == "done" and not self.pending and not self.none_pending
@@ -606,7 +609,8 @@ class BothCapture:
             latest = rec.sensors.latest_imu_t() or 0.0
             for seg in [s for s in rec.none_pending if latest >= s.end_t + POST_S]:
                 rec.none_pending.remove(seg)
-                if rec.save_block(NONE, seg.start_t - 0.05, seg.start_t + 0.05, quiet=True) is not None:
+                if rec.save_block(NONE, seg.start_t - 0.05, seg.start_t + 0.05, quiet=True,
+                                  data_end=seg.end_t) is not None:
                     self.order.append(name)
                     print(f"saved {name.upper()} NONE {rec.counts[NONE]}")
         waiting = self.pending or any(rec.none_pending for rec in self.recorders.values())
@@ -661,6 +665,21 @@ def draw_common(cap, frame, row, button_held):
         ps.put(frame, cap.result[:75], h - ps.TEXT_BOTTOM - 25, cap.result_colour, 0.55)
 
 
+def ask_person(given=""):
+    """Who is punching. Every recording carries it, so one person's data can be deleted later with
+    punch_sessions.py --person NAME. Asked for when --person is left out; stored in lower case, spaces as _."""
+    name = (given or "").strip()
+    while not name:
+        try:
+            name = input("Who is punching? Type their name and press Enter: ").strip()
+        except EOFError:  # no terminal to ask (a test or a script)
+            name = "unknown"
+            print("No name given, so these recordings are saved as 'unknown'.")
+    name = "_".join(name.lower().split())  # one word, so --person NAME works in a command
+    print(f"Recording as '{name}'. Delete this person's data later with: python punch_sessions.py --person {name}")
+    return name
+
+
 def train_arm(arm, recorded):
     """One and done: train the arm's model on everything in its folder (NONE included) when a session saved
     anything. The model it replaces is kept beside it as .bak."""
@@ -682,6 +701,7 @@ def main_both(args):
     if clash:
         raise SystemExit(f"--both records each arm to its own folder and port, so it can't be used with {', '.join(clash)}."
                          " For a phone as the right arm, use --right-phone ADDRESS.")
+    args.person = ask_person(args.person)
     config = ps.load_config()
     recorders = {}
     cap = BothCapture(recorders, args.target)
@@ -723,7 +743,8 @@ def main_both(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--target", type=int, default=100, help="punches wanted of each kind")
-    parser.add_argument("--person", default="", help="who is punching (saved with each block)")
+    parser.add_argument("--person", default="", help="who is punching, saved with each recording so one person's "
+                        "data can be deleted later (punch_sessions.py --person NAME). Asked for if left out")
     parser.add_argument("--button", action="store_true", help="hold the glove button around each punch")
     ps.add_arm_argument(parser)
     ps.add_phone_argument(parser)
@@ -748,6 +769,8 @@ def main(argv=None):
     arm = ps.ARMS[args.arm]
     args.data, args.port = args.data or arm.data_dir, args.port or arm.port
 
+    ps.phone_for(args)  # check the options before asking anything
+    args.person = ask_person(args.person)
     config = ps.load_config()
     sensors = ps.LiveSensors(config["segment"], simulate=args.simulate, port=args.port, arm=arm, phone=ps.phone_for(args))
     cls = ButtonCapture if args.button else PromptedCapture
