@@ -147,7 +147,7 @@ def draw_3d(world, vis, yaw, size=480, scale=250):
 
 
 def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
-         on_features=None, on_draw=None):
+         on_features=None, on_draw=None, builtin_punches=True):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
@@ -159,8 +159,11 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     on_calibrated(): called after a successful calibration.
     on_features(now, speeds, travel, from_low): the raw numbers the punch decision uses, every frame.
         speeds = [left, right] wrist speed; travel = 2x3 array of (extension, right, up) per hand;
-        from_low = [left, right] wrist started below the elbow. Used by tune_punches.py.
+        from_low = [left, right] wrist started below the elbow. It may return a list of (side, kind)
+        punches it decided; those are shown on screen and passed to on_punch.
     on_draw(frame): draw extra text on the camera image before it is shown.
+    builtin_punches: set False to switch off this file's own punch check, so only the punches
+        returned by on_features count (see punch_detector.py).
     """
     ensure_model()
     landmarker = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
@@ -219,7 +222,7 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
                 travel = punch_travel(delta, history[0][1], history[-1][1], world, sw)
                 for i, side in enumerate("LR"):
                     speeds[i] = np.linalg.norm(delta[i]) / dt
-                    if speeds[i] > PUNCH_SPEED and now - last_punch[side] > PUNCH_COOLDOWN:
+                    if builtin_punches and speeds[i] > PUNCH_SPEED and now - last_punch[side] > PUNCH_COOLDOWN:
                         kind = classify_punch(side, travel[i], history[0][2][i])
                         ext, right, up = travel[i]
                         print(f"{side} {kind} speed={speeds[i]:.1f} extension={ext:.2f} right={right:.2f} up={up:.2f} low={history[0][2][i]}")
@@ -229,7 +232,10 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
                             if on_punch:
                                 on_punch(kind, side, speeds[i])
                 if on_features:
-                    on_features(now, list(speeds), travel, list(history[0][2]))
+                    for side, kind in on_features(now, list(speeds), travel, list(history[0][2])) or ():
+                        flash[side] = (kind, now)
+                        if on_punch:
+                            on_punch(kind, side, speeds["LR".index(side)])
 
             states = body_state(img, world, sw, baseline)
             if on_states:

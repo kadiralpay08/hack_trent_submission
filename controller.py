@@ -15,6 +15,7 @@ import os
 import sys
 
 import game_input
+import punch_detector
 
 VK_F7, VK_F8, VK_F9 = 0x76, 0x77, 0x78
 
@@ -45,10 +46,11 @@ class Hotkeys:
         return fired
 
 
-def make_callbacks(game, hotkeys, log=print, glove=None, sound=beep):
+def make_callbacks(game, hotkeys, log=print, glove=None, sound=beep, detector=None):
     """Build the callbacks for pose_tracker.main(), as a dict of keyword arguments.
 
     Kept separate from main() so it can be tested without a camera.
+    detector is a punch_detector.PunchDetector; pass False to use pose_tracker's own punch check.
 
     glove is an optional glove_punch.GlovePunches. When given, a camera punch only counts if that
     hand's glove also felt one. A hand with no glove connected is never blocked.
@@ -90,8 +92,13 @@ def make_callbacks(game, hotkeys, log=print, glove=None, sound=beep):
         log("calibrated")
         sound()
 
-    return dict(on_punch=on_punch, on_states=on_states, on_frame=on_frame,
-                want_calibrate=want_calibrate, on_calibrated=on_calibrated)
+    callbacks = dict(on_punch=on_punch, on_states=on_states, on_frame=on_frame,
+                     want_calibrate=want_calibrate, on_calibrated=on_calibrated)
+    if detector is not False:
+        detector = detector or punch_detector.PunchDetector()
+        callbacks["on_features"] = detector.update
+        callbacks["builtin_punches"] = False
+    return callbacks
 
 
 def main():
@@ -100,6 +107,8 @@ def main():
     parser.add_argument("--live", action="store_true", help="really press keys (default: only print them)")
     parser.add_argument("--glove", action="store_true",
                         help="listen for the glove on UDP port 5005 and only accept punches the glove also felt")
+    parser.add_argument("--builtin-punches", action="store_true",
+                        help="use pose_tracker's original punch check instead of punch_detector.py")
     parser.add_argument("--simulate-glove", action="store_true",
                         help="like --glove, but with a fake glove that punches every 1.5 s (for testing)")
     args = parser.parse_args()
@@ -113,6 +122,9 @@ def main():
     print("LIVE: keys go to the focused window." if args.live else "Dry run: nothing is pressed.")
     print(f"Key output is {'ON' if game.enabled else 'OFF'}. F7 calibrates, F8 toggles output, F9 quits.")
     print("Stand in your guard in front of the camera and press F7 to calibrate (any time, from any window).")
+    if not args.builtin_punches:
+        print("Camera punches: HOOK and UPPERCUT are detected. Straight punches (jab, cross) are not: a webcam")
+        print("facing you cannot see them. Use a glove for those, or press the jab/cross keys by hand.")
 
     glove = None
     if args.glove or args.simulate_glove:
@@ -126,7 +138,7 @@ def main():
         print("Glove: listening on UDP port 5005. Camera punches need a matching glove punch.")
 
     import pose_tracker  # imported here so the rest of this file works without OpenCV or MediaPipe
-    callbacks = make_callbacks(game, Hotkeys(), glove=glove)
+    callbacks = make_callbacks(game, Hotkeys(), glove=glove, detector=False if args.builtin_punches else None)
     try:
         pose_tracker.main(**callbacks)
     finally:
