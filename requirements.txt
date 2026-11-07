@@ -3,3 +3,4 @@ opencv-python
 numpy
 pyserial
 matplotlib
+scikit-learn
