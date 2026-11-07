@@ -1,0 +1,5 @@
+{
+  "_note": "STARTING VALUES, not yet tuned. Everything except straight_ext is copied from the front-on camera, which was tuned on a recorded session. Record a session at 45 degrees (python tune_punches.py --variant angled_camera), then python replay_punches.py --variant angled_camera, and change values here until it scores well.",
+  "straight_ext": 0.4,
+  "lead": "L"
+}
