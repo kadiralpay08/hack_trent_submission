@@ -1,0 +1,30 @@
+what were the 103 lines added and what did they change
+
+---
+
+so theres no current python script that actually combines both the imu and the opencv readings?
+
+---
+
+is there a way we can update the brain to have it tell all the agents to check the brain before making any changes/check for any changes that exist before. I then want you to update the project description so that all agents are agreed on whats happening.
+
+
+Here is a run down for your understanding, and to use to inform all other agents.
+
+1. The esp32-cam will read the mpu6050 data, and output it as a raw data stream over wifi as outlined in the current code using TDP or whatever the protocol is called.
+2.it will send these over a phone hotspot to a laptop, which depending on the following points will either store the raw data, or process then store the data
+3. the same laptop will use an opencv pose estimation and read the frames, and synchronize the frames with the data points from the IMU.
+4. The start of a punch will be detected by some flag (most likely high acceleration in one direction) and the end will be detecte eitehr by a certain amount of time passing, or by high decelleration, whichever comes first. You need to create a python script that reads the keyboard inputs and lets us type in how long the timeout is before it reads the end of the punch, and it needs to display on the pose estimate display whenever a punch starts and ends with the current selected time out.
+4. We will create and train either a random forest model to classify punches based on processeed MPU data and opencv joint angles, or a small neural network which uses the raw sensor data, consider gemini/google ai lab for this.
+5.We will pass each punch through whichever model architecture we use and classify it is as a either a jab, uppercut, or hook. we are only using the left hand for now.
+6. Depending on the classification, it will output a spefic keyboard press to control some kind of boxing game, for now pick your own control scheme
+
+When i say we in this, i mean we as in the team, and you claude, this is guidance and also instructions/tasks to do. I want you to do this but first understand everything we the team wwant.
+
+After you reach the point where youve designed the random forest model (start with making that and us testing that, and if we need to we will try a neural network), then create a script which has us press a push button attached to the esp32, then have us punch, then have us release it, in order to create one punch recognized as a data "block" for the training, we want to record 100 jabs, 100 left hooks, 100 left uppercuts.
+
+If you have any questions on some kind of design decision to make ask me?
+
+---
+
+Also please understand, that when an uppercut happens, the motion should be arm moves down, and the up, a jab is just straight forward, and a left hook is to the left, forward, to the right
