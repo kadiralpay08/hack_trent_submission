@@ -146,7 +146,14 @@ def draw_3d(world, vis, yaw, size=480, scale=250):
     return canvas
 
 
-def main():
+def main(on_punch=None, on_states=None, on_frame=None):
+    """Run the tracker. Run on its own it only draws; the callbacks let other code react.
+
+    on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
+    on_states(states): called every frame with the body-state labels active right now (BLOCK, DUCK,
+        SLIP LEFT, SLIP RIGHT, GUARD DOWN). It gets an empty list when nobody is in view.
+    on_frame(): called every frame; return True to stop the tracker.
+    """
     ensure_model()
     landmarker = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=MODEL_PATH),
@@ -203,13 +210,20 @@ def main():
                         if kind:
                             last_punch[side] = now
                             flash[side] = (f"{kind} {speeds[i]:.1f}", now)
+                            if on_punch:
+                                on_punch(kind, side, speeds[i])
 
-            lines = [" | ".join(body_state(img, world, sw, baseline)) or "ok",
+            states = body_state(img, world, sw, baseline)
+            if on_states:
+                on_states(states)
+            lines = [" | ".join(states) or "ok",
                      f"speed L {speeds[0]:.1f}  R {speeds[1]:.1f}"]
             draw(frame, img, vis, flash, now)
             cv2.imshow("3D skeleton", draw_3d(world, vis, yaw))
         else:
             cv2.imshow("3D skeleton", np.zeros((480, 480, 3), np.uint8))
+            if on_states:
+                on_states([])  # nobody in view: let go of any held keys
 
         for n, text in enumerate(lines):
             cv2.putText(frame, text, (10, 30 + 30 * n), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
@@ -217,6 +231,8 @@ def main():
             cv2.putText(frame, "press C to calibrate", (10, frame.shape[0] - 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         cv2.imshow("Pose", frame)
+        if on_frame and on_frame():
+            break
         key = cv2.waitKey(1) & 0xFF
         if key == ord("c") and result.pose_landmarks:
             baseline = {"nose": img[NOSE].copy(), "sw": np.linalg.norm(img[L_SH] - img[R_SH])}
@@ -226,6 +242,8 @@ def main():
         elif key == ord("q"):
             break
 
+    if on_states:
+        on_states([])
     cap.release()
     cv2.destroyAllWindows()
 
