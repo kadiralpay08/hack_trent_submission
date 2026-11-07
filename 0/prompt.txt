@@ -1,0 +1,25 @@
+i forgot the last part of the instructions, here it is:
+
+<pasted_content id="b54a">
+7. Daily workflow
+
+git switch main, then git pull.
+git switch -c yourname/what-youre-building.
+Run claude in the repo folder and give it the task. CLAUDE.md already tells it to use Graph and Brain.
+Commit often and answer yes to the session link prompt.
+git push -u origin yourname/what-youre-building.
+Open a pull request on GitHub and merge it. Everyone runs git pull.
+8. Rules for the group
+
+Andre's code (pose_tracker.py, glove_receiver.py) is on his branch andre/pose-and-glove. Until it's merged to main, don't edit those files without checking with him.
+Agree with Kadir and Andre on who owns which files before you start.
+Never commit straight to main.
+</pasted_content id="b54a">
+
+---
+
+can you update the readme to explain what each file does by reading through all the files and reanalyzing them
+
+---
+
+comitt and mergwe
