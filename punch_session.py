@@ -243,6 +243,32 @@ def count_blocks(root=DATA_DIR):
     return counts
 
 
+# --- keys and layout shared by the camera tools ------------------------------------------------------
+# pose_tracker draws its calibration messages in the bottom 70 pixels (pose_tracker.BOTTOM_RESERVED).
+# Tools keep their own bottom text at or above TEXT_BOTTOM pixels from the bottom, so nothing covers them.
+TEXT_BOTTOM = 80
+VK_PERIOD, VK_DECIMAL, VK_F11 = 0xBE, 0x6E, 0x7A
+
+
+class ToolKeys:
+    """Global keys that work from any window, without Enter: "." (start / pause) and F11 (full screen)."""
+
+    def __init__(self, fullscreen):
+        import controller
+        self.keys = controller.Hotkeys()
+        self.fullscreen = fullscreen
+
+    def period(self):
+        main, pad = self.keys.pressed(VK_PERIOD), self.keys.pressed(VK_DECIMAL)  # read both every frame
+        return main or pad
+
+    def poll_fullscreen(self):
+        if self.keys.pressed(VK_F11):
+            import pose_tracker
+            self.fullscreen = not self.fullscreen
+            pose_tracker.set_fullscreen(self.fullscreen)
+
+
 # --- drawing helpers shared by the camera windows ------------------------------------------------------
 def draw_trace(frame, times, values, now, seconds, top_g, marks, origin, size, threshold_g=None):
     """A strip chart of acceleration beyond gravity. marks = [(t, colour)] vertical lines."""

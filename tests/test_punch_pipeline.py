@@ -165,8 +165,83 @@ class TimedTest(unittest.TestCase):
             parts.append(rec)
             t0 = rec["t"][-1] + 1 / 500
         imu = {k: np.concatenate([p[k] for p in parts]) for k in ("t", "accel", "gyro")}
-        rows = punch_tune.score_test(imu, None, 0.0, t0, punch_segment.SegmentSettings(), timeouts_ms=(200, 400))
+        rows = punch_tune.score_test(imu, None, [(0.0, t0)], punch_segment.SegmentSettings(), timeouts_ms=(200, 400))
         self.assertEqual({ms: found for ms, found, _, _ in rows}, {200: 5, 400: 5})
+        # a pause in the middle: punches that started while paused do not count
+        half = parts[2]["t"][0]
+        rows = punch_tune.score_test(imu, None, [(0.0, half - 0.01)], punch_segment.SegmentSettings(), timeouts_ms=(400,))
+        self.assertEqual(rows[0][1], 2)
+
+
+class FakeSensors:
+    """Just enough of LiveSensors for the start / pause logic, with no glove or camera."""
+
+    def __init__(self):
+        import queue
+        self.events, self.settings, self.now_t = queue.Queue(), punch_segment.SegmentSettings(), 100.0
+        self.segmenter = type("S", (), {"ready": True})()
+
+    def glove_ok(self):
+        return True
+
+    def latest_imu_t(self):
+        return self.now_t
+
+
+class StartAndPause(unittest.TestCase):
+    def test_tuner_test_waits_for_calibration_and_pauses(self):
+        import punch_tune
+        tuner = punch_tune.Tuner(FakeSensors(), punch_session.load_config())
+        tuner.classifier = None
+        tuner.say = lambda text: None
+        tuner.set_up_test(["3", "10", "jab"])
+        tuner.toggle_test()                       # not calibrated yet
+        self.assertEqual(tuner.test["state"], "waiting")
+        tuner.on_calibrated()
+        tuner.toggle_test()
+        self.assertEqual(tuner.test["state"], "countdown")
+        tuner.test["go_wall"] = 0
+        tuner.update_test()
+        self.assertEqual(tuner.test["state"], "running")
+        self.assertTrue(tuner.counts_for_test(100.5))
+        tuner.sensors.now_t = 102.0
+        tuner.test["run_wall"] -= 2.0             # as if it had been running for 2 s
+        tuner.toggle_test()                       # pause
+        self.assertEqual(tuner.test["state"], "paused")
+        self.assertEqual(tuner.test["intervals"], [(100.0, 102.0)])
+        self.assertFalse(tuner.counts_for_test(103.0))  # a punch while paused does not count
+        self.assertAlmostEqual(tuner.test["left"], 8.0, delta=0.1)  # the clock stopped at the pause
+
+    def test_capture_waits_then_pause_cancels_the_showing_prompt(self):
+        import time
+        import punch_capture
+        with tempfile.TemporaryDirectory() as tmp:
+            cap = punch_capture.PromptedCapture(FakeSensors(), punch_session.load_config(), 5, tmp, "test")
+            cap.say = lambda *a: None
+            punch_capture.beep = lambda kind: None
+            cap.toggle()
+            self.assertEqual(cap.phase, "waiting")        # not calibrated: nothing starts
+            seg = punch_segment.Segment(start_t=99.0, end_t=99.2, reason="decel")
+            cap.sensors.events.put(("end", seg))
+            cap.on_frame()
+            self.assertEqual(cap.none_pending, [])       # movement while waiting is not saved as NONE
+            cap.on_calibrated()
+            cap.toggle()
+            self.assertEqual(cap.phase, "announce")
+            cap.phase_end = 0
+            cap.on_frame()                                # announce -> rest
+            cap.phase_end = 0
+            cap.on_frame()                                # rest -> go: a prompt is showing
+            self.assertEqual((cap.phase, cap.prompts_done, len(cap.pending)), ("go", 1, 1))
+            cap.toggle()                                  # pause during the prompt
+            self.assertTrue(cap.paused)
+            self.assertEqual((cap.prompts_done, len(cap.pending), len(cap.windows)), (0, 0, 0))
+            before = cap.phase_end
+            cap.on_frame()
+            self.assertEqual(cap.phase_end, before)       # nothing moves on while paused
+            cap.toggle()
+            self.assertFalse(cap.paused)
+            self.assertEqual(cap.phase, "announce")
 
 
 if __name__ == "__main__":

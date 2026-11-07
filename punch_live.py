@@ -91,10 +91,10 @@ class LivePlay:
             ps.put(frame, "hold the glove still for a moment...", top, ORANGE, 0.7)
         if time.time() - self.shown_t < 1.5:
             ps.put(frame, self.shown, top + 40, self.shown_colour, 1.0, thick=3)
-        ps.put(frame, f"key output {'ON' if self.game.enabled else 'OFF (F8)'}  |  F7 calibrate  F9 quit",
-               frame.shape[0] - 40, YELLOW if self.game.enabled else GREY, 0.5)
+        ps.put(frame, f"key output {'ON' if self.game.enabled else 'OFF (F8)'}  |  F7 calibrate  F9 quit  F11 full screen",
+               frame.shape[0] - ps.TEXT_BOTTOM, YELLOW if self.game.enabled else GREY, 0.5)
         ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  (F5 looser, F6 stricter)"
-               f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - 65, GREY, 0.5)
+               f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - ps.TEXT_BOTTOM - 25, GREY, 0.5)
 
     def adjust_confidence(self, step):
         self.clf.min_confidence = round(min(0.95, max(0.35, self.clf.min_confidence + step)), 2)
@@ -108,6 +108,7 @@ def main():
     parser.add_argument("--model", default=ps.MODEL_PATH)
     parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "browser_boxing.json"))
     parser.add_argument("--simulate", action="store_true", help="fake glove (no hardware)")
+    parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
@@ -147,10 +148,12 @@ def main():
     callbacks.pop("on_punch")
     hotkey_frame = callbacks["on_frame"]
     sensitivity_keys = controller.Hotkeys()
+    screen_keys = ps.ToolKeys(fullscreen=not args.windowed)
     started_confidence, started = clf.min_confidence, time.time()
 
     def on_frame():
         play.poll()
+        screen_keys.poll_fullscreen()
         if sensitivity_keys.pressed(VK_F5):
             play.adjust_confidence(-0.05)
         if sensitivity_keys.pressed(VK_F6):
@@ -158,7 +161,7 @@ def main():
         return hotkey_frame() or bool(args.max_seconds and time.time() - started > args.max_seconds)
 
     callbacks.update(sensors.pose_callbacks())
-    callbacks.update(on_frame=on_frame, on_draw=play.on_draw, camera_index=args.camera)
+    callbacks.update(on_frame=on_frame, on_draw=play.on_draw, camera_index=args.camera, fullscreen=not args.windowed)
 
     print(f"Model trained {clf.info['trained_at']} on {clf.info['counts']}, "
           f"cross-validated accuracy {100 * clf.info['cv_accuracy']:.0f}%.")
