@@ -91,6 +91,8 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 
 **Shared parts:** `glove_receiver.py`, `pose_tracker.py`, `game_input.py`, `firmware/glove_imu/` (the left glove, ESP32-CAM). `firmware/glove_imu_s3/` is an ESP32-S3 glove for either arm, and `firmware/mpu6050_usb_check/` and `firmware/mpu9250_usb_check/` check whether a sensor is alive over USB.
 
+**Kadir's game and launcher:** `website/` is a webcam sparring game with arcade sound (`website/js/audio.js`: a punch sound per move, a beat, READY and FIGHT!), and `keybridge.py` serves it and turns its punches into real key presses through `game_input.py`. `play.py` and `variants/` select product versions; the 45 degree camera is shelved in `archive/angled_camera/`.
+
 **Earlier work, kept and not the main path:** `controller.py`, `glove_punch.py`, `punch_detector.py`, `tune_punches.py`, `replay_punches.py` (Kadir's camera-rules controller), `glove_check.py` (still the first thing to run if the glove seems broken), `punch_tracker.py`, `firmware/punch_stream/`, `firmware/sketch_nov6a/` (wired Uno experiments).
 
 ## Setup notes

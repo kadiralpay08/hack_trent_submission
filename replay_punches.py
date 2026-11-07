@@ -89,17 +89,35 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("file", nargs="?", help="session csv (default: the newest in tuning_data/)")
     parser.add_argument("--old", action="store_true", help="score what pose_tracker's built-in check fired")
+    parser.add_argument("--variant", help="use this product variant's settings and its recorded sessions "
+                                          "(tuning_data/<variant>/)")
     parser.add_argument("--set", nargs="*", default=[], metavar="NAME=VALUE", help="override detector settings")
     args = parser.parse_args()
 
-    path = args.file or sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                      "tuning_data", "session_*.csv")))[-1]
+    root = os.path.dirname(os.path.abspath(__file__))
+    folder, settings = os.path.join(root, "tuning_data"), punch_detector.Settings()
+    if args.variant:
+        import variants
+        try:
+            variant = variants.get(args.variant)
+        except ValueError as e:
+            raise SystemExit(str(e))
+        folder, settings = variant.data_dir, variant.settings()
+        print(f"variant {variant.name}: settings from {os.path.relpath(variant.folder, root)}/settings.json")
+    sessions = sorted(glob.glob(os.path.join(folder, "session_*.csv")))
+    if not args.file and not sessions:
+        hint = f" --variant {args.variant}" if args.variant else ""
+        raise SystemExit(f"No recorded sessions in {os.path.relpath(folder, root)}. Record one with: "
+                         f"python tune_punches.py{hint}")
+    path = args.file or sessions[-1]
     rows = load(path)
     print(f"{os.path.basename(path)}: {len(rows)} frames, {rows[-1]['t']:.0f} s")
+    note = path[:-4] + ".txt"
+    if os.path.exists(note):
+        print("recorded under:", open(note, encoding="utf-8").read().strip().splitlines()[-1])
     if args.old:
         score(rows, old_events(rows))
         return
-    settings = punch_detector.Settings()
     for item in args.set:
         name, value = item.split("=")
         setattr(settings, name, None if value == "None" else float(value))
