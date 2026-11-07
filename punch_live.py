@@ -3,6 +3,7 @@
   python punch_live.py                dry run: prints the keys it would press, presses nothing
   python punch_live.py --live         really presses keys in whichever window has focus
   python punch_live.py --simulate     fake glove (no hardware), to try the tool
+  python punch_live.py --live --popup camera as a small always-on-top corner window, so the game stays visible
 
 Punches (glove and camera together, via the model from punch_train.py): JAB = J, HOOK = H, UPPERCUT = U.
 Defence (camera only, as in controller.py): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D.
@@ -26,6 +27,7 @@ import argparse
 import os
 import time
 
+import popup_window
 import punch_segment
 import punch_session as ps
 
@@ -98,6 +100,20 @@ class LivePlay:
         ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  ([ looser, ] stricter)"
                f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - ps.TEXT_BOTTOM - 25, GREY, 0.5)
 
+    def on_draw_popup(self, frame):
+        """A sparse picture for the corner popup. The border colour says it at a glance: green = keys on,
+        grey = keys off, red = no glove data."""
+        import cv2
+        h, w = frame.shape[:2]
+        if not self.sensors.glove_ok():
+            colour = (0, 0, 255)
+            ps.put(frame, "NO GLOVE DATA", 110, colour, 1.0, thick=3)
+        else:
+            colour = GREEN if self.game.enabled else GREY
+        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), colour, 10)
+        if time.time() - self.shown_t < 1.5:
+            ps.put(frame, self.shown, 150, self.shown_colour, 0.9, thick=3)
+
     def adjust_confidence(self, step):
         self.clf.min_confidence = round(min(0.95, max(0.35, self.clf.min_confidence + step)), 2)
         self.show(f"confidence cutoff {100 * self.clf.min_confidence:.0f}%", YELLOW)
@@ -111,6 +127,10 @@ def main():
     parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "browser_boxing.json"))
     parser.add_argument("--simulate", action="store_true", help="fake glove (no hardware)")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
+    parser.add_argument("--popup", action="store_true", help="show the camera as a small always-on-top window in a "
+                        "screen corner that never takes focus from the game (Windows)")
+    parser.add_argument("--popup-corner", choices=popup_window.CORNERS, default="bottom-right")
+    parser.add_argument("--popup-size", type=int, default=360, help="popup width in pixels")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--port", type=int, default=5005, help="UDP port the glove sends to")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
@@ -150,12 +170,15 @@ def main():
     callbacks.pop("on_punch")
     hotkey_frame = callbacks["on_frame"]
     sensitivity_keys = controller.Hotkeys()
-    screen_keys = ps.ToolKeys(fullscreen=not args.windowed)
+    popup = popup_window.Popup(args.popup_size, args.popup_corner) if args.popup else None
+    fullscreen = not args.windowed and not popup  # a corner popup is never full screen
+    screen_keys = ps.ToolKeys(fullscreen=fullscreen)
     started_confidence, started = clf.min_confidence, time.time()
 
     def on_frame():
         play.poll()
-        screen_keys.poll_fullscreen()
+        if not popup:
+            screen_keys.poll_fullscreen()
         if sensitivity_keys.pressed(VK_LOWER):
             play.adjust_confidence(-0.05)
         if sensitivity_keys.pressed(VK_RAISE):
@@ -163,7 +186,14 @@ def main():
         return hotkey_frame() or bool(args.max_seconds and time.time() - started > args.max_seconds)
 
     callbacks.update(sensors.pose_callbacks())
-    callbacks.update(on_frame=on_frame, on_draw=play.on_draw, camera_index=args.camera, fullscreen=not args.windowed)
+    def on_draw(frame):
+        if popup:
+            play.on_draw_popup(frame)
+            popup.update(frame)
+        else:
+            play.on_draw(frame)
+
+    callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=fullscreen)
 
     print(f"Model trained {clf.info['trained_at']} on {clf.info['counts']}, "
           f"cross-validated accuracy {100 * clf.info['cv_accuracy']:.0f}%.")
