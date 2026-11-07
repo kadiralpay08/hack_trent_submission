@@ -1,0 +1,69 @@
+{
+  "cli_version": "0.13.1",
+  "checkpoint_id": "01M6W206MK7RJDG78KF6JAEYJ1",
+  "strategy": "manual-commit",
+  "branch": "andre/tracking-mode",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "PROJECT.md",
+    "README.md",
+    "archive/angled_camera/README.md",
+    "archive/angled_camera/__init__.py",
+    "archive/angled_camera/settings.json",
+    "archive/angled_camera/tune.bat",
+    "controller.py",
+    "keybridge.py",
+    "overlay.py",
+    "play.bat",
+    "play.py",
+    "pose_tracker.py",
+    "punch_detector.py",
+    "replay_punches.py",
+    "run.bat",
+    "tune_punches.py",
+    "variants/README.md",
+    "variants/__init__.py",
+    "variants/base.py",
+    "website/README.md",
+    "website/css/style.css",
+    "website/index.html",
+    "website/js/audio.js",
+    "website/js/bridge.js",
+    "website/js/detect.js",
+    "website/js/game.js",
+    "website/js/main.js",
+    "website/js/modes.js",
+    "website/js/pose.js",
+    "website/settings/angled_camera.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 26,
+    "cache_creation_tokens": 10661,
+    "cache_read_tokens": 966852,
+    "output_tokens": 5452,
+    "api_call_count": 13
+  },
+  "redaction": {
+    "replacements": 4,
+    "layers": {
+      "betterleaks": 0,
+      "connection_string": 0,
+      "credential_key": 0,
+      "credential_value": 0,
+      "credentialed_uri": 0,
+      "entropy": 2,
+      "key_context": 2,
+      "provider_token": 0,
+      "shell_stdin": 0
+    }
+  }
+}

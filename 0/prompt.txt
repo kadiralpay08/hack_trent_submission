@@ -1,0 +1,5 @@
+can you combine all the features, kadir should have added sounds to the interface, you shouldve made the mouse controller thing, let me know what pin you set it to.
+
+---
+
+Then create a pull request for me to approove
