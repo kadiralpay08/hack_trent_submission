@@ -55,3 +55,28 @@ The bridge only accepts requests from this computer and from `keyboardwarrior.cl
 - Glove mode follows `controller.py --glove`: the glove confirms a camera punch. It is not the trained random forest model that `play.bat` (`punch_live.py`) uses, so the website and the Python game classify punches differently. Straight punches are not detected from a front-on camera. The glove has not been tested with real hardware here, only with the simulated glove.
 - The real Browser Boxing has not been played with this yet. The key mapping notes in `mappings/browser_boxing.json` still apply (whether guard is held or toggled, and which way a slip moves the boxer).
 - Use casual play or bots in Browser Boxing, never ranked.
+
+## Sound
+
+Every sound is made in the browser with the Web Audio API (`js/audio.js`), in the style of old arcade games. There are no sound files. The browser keeps sound silent until the page has been clicked or a key pressed.
+
+| When | Sound |
+|---|---|
+| Fight starts | A rising "READY" jingle, then "FIGHT!" with a chord, cymbal and bell |
+| During the round | A shuffle beat (kick on 1 and 3, snare on 2 and 4, swung hi-hats, a bass line and a short chord stab), 104 BPM. It speeds up to 126 BPM for the last 15 seconds |
+| Jab | A quick high "tik", then a light tap |
+| Cross | A falling "pyoo", then a thud |
+| Hook | A wide "whoo-oop" swing, then a bright slap and a follow-through |
+| Uppercut | A rising zip like an arcade power-up, then a deep boom with a "ting" |
+| Landing on a guarding bot | A metallic clank instead of the impact |
+| Combo of 2 or more | A blip that rises with each punch |
+| Bot winds up | Two high beeps for a straight punch (SLIP!), a high then a low beep for a hook (DUCK!) |
+| You dodge, block or get hit | A coin-style arpeggio, a glove clap, a falling crunch |
+| You slip, duck or raise your guard | A swish, a lower swish, a glove tap (not more than every 0.25 s each) |
+| Last 10 seconds | A tick each second, higher for the last three |
+| End of round | A knockout gets a big hit and a crowd roar. A decision gets three bell rings. Then a fanfare for a win, a "wah wah wah wahhh" for a loss, two notes for a draw |
+| Calibrate, camera on | A rising countdown beep, a two-tone chime, a power-up sweep |
+
+**M** turns all sound off and on, **N** turns only the music off and on. Both are remembered. The beat stops when the Browser Boxing tab is showing (the sparring fight is frozen then), when the page is hidden, and when the round ends.
+
+The sounds were checked by rendering them offline and measuring them (no clipping, each punch different from the others, the beat landing on the right steps, no dropped or late steps in the live scheduler), not by ear. If something is too loud, too busy or too repetitive, the levels are the `vol` numbers in `js/audio.js` and the tempos are `BPM` and `HURRY_BPM` at the top.

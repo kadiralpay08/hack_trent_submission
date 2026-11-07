@@ -2,6 +2,8 @@
 // the key bridge: punches (JAB, CROSS, HOOK, UPPERCUT) and body states (BLOCK, DUCK, SLIP LEFT/RIGHT).
 // The bot telegraphs each attack. Dodge it with the move on screen, or block it to take a quarter.
 
+import { sound } from './audio.js';
+
 const W = 1280, H = 720;           // the game is drawn on a 16:9 area and scaled to fit the stage
 const ROUND_SECONDS = 90;
 const HP = 100;
@@ -17,54 +19,6 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const lerp = (a, b, k) => a + (b - a) * k;
 
-// --- sound: small synthesised effects, no files ---
-
-export const sound = {
-  ctx: null,
-  muted: false,
-  unlock() {
-    if (!this.ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) this.ctx = new AC();
-    }
-    this.ctx?.resume?.();
-  },
-  tone(freq, dur, type = 'sine', vol = 0.15, slideTo = null) {
-    if (!this.ctx || this.muted) return;
-    const t = this.ctx.currentTime, o = this.ctx.createOscillator(), g = this.ctx.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(freq, t);
-    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(this.ctx.destination);
-    o.start(t);
-    o.stop(t + dur);
-  },
-  noise(dur, vol = 0.2, freq = 800) {
-    if (!this.ctx || this.muted) return;
-    const n = Math.floor(this.ctx.sampleRate * dur), buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / n);
-    const src = this.ctx.createBufferSource(), f = this.ctx.createBiquadFilter(), g = this.ctx.createGain();
-    f.type = 'lowpass';
-    f.frequency.value = freq;
-    g.gain.value = vol;
-    src.buffer = buf;
-    src.connect(f).connect(g).connect(this.ctx.destination);
-    src.start();
-  },
-  play(name) {
-    if (name === 'hit') { this.noise(0.12, 0.35, 900); this.tone(120, 0.12, 'sine', 0.3, 60); }
-    else if (name === 'guarded') { this.noise(0.06, 0.15, 2500); }
-    else if (name === 'hurt') { this.noise(0.18, 0.4, 500); this.tone(90, 0.2, 'sawtooth', 0.2, 45); }
-    else if (name === 'whoosh') { this.noise(0.2, 0.12, 3000); }
-    else if (name === 'bell') { this.tone(880, 0.9, 'triangle', 0.18); this.tone(1320, 0.7, 'triangle', 0.08); }
-    else if (name === 'ko') { this.tone(220, 0.8, 'sawtooth', 0.2, 55); }
-    else if (name === 'beep') { this.tone(1000, 0.12, 'square', 0.1); }
-  },
-};
-
 // --- the game ---
 
 export class Game {
@@ -78,7 +32,9 @@ export class Game {
     this.hurt = 0;
     this.time = 0;
     this.record = { wins: 0, losses: 0 };
-    this.phase = 'ready';           // ready, fight, over
+    this.phase = 'ready';           // ready (title), intro (READY...), fight, over
+    this.paused = false;
+    this.introAt = this.fightAt = -9;
     this.reset();
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
     this.resize();
@@ -101,19 +57,32 @@ export class Game {
     this.canvas.height = Math.max(2, Math.round(r.height * dpr));
   }
 
-  setStates(list) { this.states = new Set(list); }
+  setStates(list) {
+    const next = new Set(list);
+    if (this.phase === 'fight') for (const s of next) if (!this.states.has(s)) sound.move(s);  // a swish when you slip, duck or block
+    this.states = next;
+  }
 
-  /** Start or restart a fight (from ready or over). */
+  /** Freeze the game while its tab is not showing, so the fight and its music do not carry on behind another tab. */
+  setPaused(paused) {
+    this.paused = paused;
+    this.last = performance.now();
+    sound.wantMusic(!paused && this.phase === 'fight');
+  }
+
+  /** Start or restart a fight (from ready or over): "READY", then "FIGHT!" a moment later. */
   start() {
-    if (this.phase === 'fight') return;
+    if (this.phase === 'fight' || this.phase === 'intro') return;
     if (this.phase === 'over' && this.time - this.overAt < 1.2) return;  // let the result be read
     this.reset();
-    this.phase = 'fight';
-    this._setBot('idle', 1.2);
-    sound.play('bell');
+    this.phase = 'intro';
+    this.introAt = this.time;
+    this._setBot('idle', 99);
+    sound.ready();
   }
 
   punch(kind, side) {
+    if (this.phase === 'intro') return;  // not until the bell
     if (this.phase !== 'fight') { this.start(); return; }
     const p = this.player;
     if (p.cool > 0) return;
@@ -132,7 +101,8 @@ export class Game {
     b.hp = Math.max(0, b.hp - dmg);
     b.flash = 0.15;
     this._float(640 + rand(-60, 60), 190, guarded ? 'BLOCKED' : `-${dmg}`, guarded ? '#8aa0c8' : GREEN);
-    sound.play(guarded ? 'guarded' : 'hit');
+    sound.punch(kind, guarded);
+    if (!guarded) sound.combo(this.combo.count);
     this.shake = Math.max(this.shake, guarded ? 2 : 6 + dmg / 2);
     if (!guarded && (b.state === 'windup' || b.state === 'idle')) this._setBot('stunned', b.state === 'windup' ? 0.6 : 0.3);
   }
@@ -147,7 +117,7 @@ export class Game {
     b.attack = Math.random() < 0.5 ? 'STRAIGHT' : 'HOOK';
     b.hand = Math.random() < 0.5 ? 'L' : 'R';
     this._setBot('windup', Math.max(0.6, 1.0 - (ROUND_SECONDS - this.clock) / 220));  // gets quicker as the round goes on
-    sound.play('whoosh');
+    sound.warn(b.attack);
   }
 
   _botStrike() {
@@ -156,14 +126,14 @@ export class Game {
     if (a.dodge.some((s) => this.states.has(s))) {
       dmg = 0;
       this._float(640, 520, 'DODGED!', GREEN);
-      sound.play('whoosh');
+      sound.dodge();
     } else if (this.states.has('BLOCK')) {
       dmg = Math.max(1, Math.round(dmg * 0.25));
       this._float(640, 520, 'BLOCKED', '#8aa0c8');
-      sound.play('guarded');
+      sound.block();
     } else {
       this._float(640, 520, `-${dmg}`, RED);
-      sound.play('hurt');
+      sound.hurt();
     }
     if (dmg > 0) { p.hp = Math.max(0, p.hp - dmg); this.hurt = 0.35; this.shake = Math.max(this.shake, 4 + dmg); }
     this._setBot('strike', 0.18);
@@ -188,7 +158,9 @@ export class Game {
     this.overAt = this.time;
     this.result = { winner, reason };
     if (winner === 'you') this.record.wins += 1; else if (winner === 'bot') this.record.losses += 1;
-    sound.play(winner === 'you' ? 'bell' : 'ko');
+    sound.wantMusic(false);
+    sound.hurry = false;
+    sound.result(winner, reason);
   }
 
   // --- time ---
@@ -196,8 +168,10 @@ export class Game {
   _frame(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    this.update(dt);
-    this.draw();
+    if (!this.paused) {
+      this.update(dt);
+      this.draw();
+    }
     requestAnimationFrame((t) => this._frame(t));
   }
 
@@ -209,9 +183,20 @@ export class Game {
       const g = p.glove[side];
       if (g) { g.t += dt; if (g.t > 0.24) p.glove[side] = null; }
     }
+    if (this.phase === 'intro' && this.time - this.introAt >= 1.1) {  // "READY" is over: "FIGHT!"
+      this.phase = 'fight';
+      this.fightAt = this.time;
+      this._setBot('idle', 1.0);
+      sound.fight();
+      sound.wantMusic(true);
+    }
     this._updateBot(dt);
     if (this.phase === 'fight') {
+      const before = Math.ceil(this.clock);
       this.clock = Math.max(0, this.clock - dt);
+      const after = Math.ceil(this.clock);
+      sound.hurry = this.clock <= 15;  // the beat speeds up for the last 15 seconds
+      if (after < before && after >= 1 && after <= 10) sound.tick(after);
       if (this.bot.hp <= 0) this._finish('you', 'KO');
       else if (p.hp <= 0) this._finish('bot', 'KO');
       else if (this.clock <= 0) {
@@ -473,6 +458,10 @@ export class Game {
   _drawBanner() {
     if (this.phase === 'ready') {
       this._banner('KEYBOARD WARRIOR', 'Throw a punch to start. Press Space if you have no camera.', RED);
+    } else if (this.phase === 'intro') {
+      this._banner('READY', 'ROUND 1', AMBER);
+    } else if (this.phase === 'fight' && this.time - this.fightAt < 0.8) {
+      this._banner('FIGHT!', ' ', RED);
     } else if (this.phase === 'over') {
       const { winner, reason } = this.result;
       const title = winner === 'you' ? (reason === 'KO' ? 'KO! YOU WIN' : 'YOU WIN ON POINTS')

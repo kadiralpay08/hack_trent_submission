@@ -2,13 +2,14 @@
 
 import { Engine, AngleGuide, makeSettings } from './detect.js';
 import { MODES, loadSettings } from './modes.js';
-import { Game, sound } from './game.js';
+import { Game } from './game.js';
+import { sound } from './audio.js';
 import { Bridge, GloveConfirm } from './bridge.js';
 import { loadPose, listCameras, openCamera, closeCamera, PoseLoop, drawCamera, framingHint } from './pose.js';
 
 const $ = (id) => document.getElementById(id);
 const el = Object.fromEntries([
-  'game', 'gameWrap', 'bbPane', 'stage', 'tabSpar', 'tabBB', 'chipCam', 'chipBody', 'chipCal', 'chipBridge', 'muteBtn',
+  'game', 'gameWrap', 'bbPane', 'stage', 'tabSpar', 'tabBB', 'chipCam', 'chipBody', 'chipCal', 'chipBridge', 'muteBtn', 'musicBtn',
   'cam', 'video', 'camFrame', 'camPlaceholder', 'startBtn', 'stopBtn', 'calBtn', 'countdown', 'countdownNumber', 'hint', 'gauge', 'gaugeZone',
   'gaugeDot', 'steps', 'modeList', 'states', 'meterL', 'meterR', 'counts', 'lastPunch', 'bridgeText', 'outputSwitch',
   'cameraSelect', 'leadSelect', 'engineInfo', 'settingsSource', 'settingsDump', 'bridgeCmd', 'bridgeLine', 'copyCmd', 'openGameBtn',
@@ -181,6 +182,7 @@ async function startCamera() {
     return;
   }
   app.cameraOn = true;
+  sound.cameraOn();
   app.loop = new PoseLoop(el.video, app.pose.landmarker, { onResult, onStall: pause });
   app.loop.start();
   el.camPlaceholder.hidden = true;
@@ -301,7 +303,7 @@ function calibrateNow() {
   if (!app.cameraOn) { notice('Start the camera first.', 'off'); return false; }
   if (app.engine.calibrate()) {
     sound.unlock();
-    sound.play('beep');
+    sound.calibrated();
     notice('Calibrated. Duck and slip are measured from this position.', 'good');
     return true;
   }
@@ -314,7 +316,7 @@ function calibrateWithCountdown(seconds = CALIBRATE_DELAY) {
   if (!app.cameraOn) { notice('Start the camera first.', 'off'); return; }
   clearInterval(app.countdownTimer);
   let n = seconds;
-  const show = () => { el.countdown.hidden = false; el.countdownNumber.textContent = String(n); sound.unlock(); sound.play('beep'); };
+  const show = () => { el.countdown.hidden = false; el.countdownNumber.textContent = String(n); sound.unlock(); sound.countdown(n); };
   show();
   app.countdownTimer = setInterval(() => {
     n -= 1;
@@ -336,6 +338,7 @@ function setStage(name) {
   el.tabBB.setAttribute('aria-selected', String(name === 'bb'));
   el.gameWrap.hidden = name !== 'spar';
   el.bbPane.hidden = name !== 'bb';
+  game.setPaused(name !== 'spar');  // the fight and its music wait while the real game is showing
   bridge.states([], undefined, true);  // never leave a key held across a switch
   applyStates();
 }
@@ -359,11 +362,22 @@ function toggleMute() {
   try { localStorage.setItem('kw-muted', sound.muted ? '1' : '0'); } catch { /* storage may be off */ }
 }
 
+function toggleMusic() {
+  sound.musicEnabled = !sound.musicEnabled;
+  el.musicBtn.textContent = sound.musicEnabled ? 'Music on' : 'Music off';
+  el.musicBtn.setAttribute('aria-pressed', String(!sound.musicEnabled));
+  try { localStorage.setItem('kw-music', sound.musicEnabled ? '1' : '0'); } catch { /* storage may be off */ }
+}
+
+// browsers keep sound silent until the page has been clicked or a key pressed
+for (const type of ['pointerdown', 'keydown']) window.addEventListener(type, () => sound.unlock(), { once: true });
+
 window.addEventListener('keydown', (e) => {
   if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
   const k = e.key.toLowerCase();
   if (k === 'c') { calibrateWithCountdown(); return; }
   if (k === 'm') { toggleMute(); return; }
+  if (k === 'n') { toggleMusic(); return; }
   if (app.stage !== 'spar') return;  // in the real-game tab these keys would only echo what the bridge presses
   sound.unlock();
   if ((k === ' ' || k === 'enter') && document.activeElement === document.body) { game.start(); e.preventDefault(); }
@@ -438,6 +452,7 @@ el.tabSpar.addEventListener('click', () => setStage('spar'));
 el.tabBB.addEventListener('click', () => setStage('bb'));
 el.openGameBtn.addEventListener('click', openGameWindow);
 el.muteBtn.addEventListener('click', toggleMute);
+el.musicBtn.addEventListener('click', toggleMusic);
 el.copyCmd.addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(el.bridgeCmd.textContent); el.copyCmd.textContent = 'Copied'; }
   catch { el.copyCmd.textContent = 'Select and copy'; }
@@ -456,6 +471,7 @@ el.cameraSelect.addEventListener('change', async () => {
 el.leadSelect.addEventListener('change', async () => { app.lead = el.leadSelect.value; await applySettings(); });
 
 try { if (localStorage.getItem('kw-muted') === '1') toggleMute(); } catch { /* storage may be off */ }
+try { if (localStorage.getItem('kw-music') === '0') toggleMusic(); } catch { /* storage may be off */ }
 renderModes();
 renderBridge();
 await applySettings();
