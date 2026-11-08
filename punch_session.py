@@ -39,6 +39,14 @@ class Arm:
     mirror: bool = False  # the simulator mirrors left-right for this arm
     magnetometer: bool = False  # its glove has one (the simulator fakes it)
 
+    def action(self, label):
+        """The name a punch goes by in the controls file. The right arm's HOOK and UPPERCUT share their names with
+        the left arm's, so they are "RIGHT HOOK" and "RIGHT UPPERCUT" and can have keys of their own. Every other
+        name (JAB, CROSS, and all of the left arm's) is unchanged."""
+        if self.name != "left" and label in ARMS["left"].labels:
+            return f"{self.name.upper()} {label}"
+        return label
+
 
 # Left: the ESP32-CAM glove (firmware/glove_imu; an MPU6050, or an MPU-6500, which reads the same).
 # Right: a second glove on port 5006, for example firmware/glove_imu_s3 with UDP_PORT set to 5006.

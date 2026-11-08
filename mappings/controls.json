@@ -2,9 +2,11 @@
   "game": "Default controls: edit with python controls_editor.py",
   "normal": {
     "JAB": {"bind": "j", "hold_ms": 50},
-    "HOOK": {"bind": "h", "hold_ms": 50},
-    "UPPERCUT": {"bind": "u", "hold_ms": 50},
-    "CROSS": {"bind": "k", "hold_ms": 50}
+    "HOOK": {"bind": "k", "hold_ms": 50},
+    "UPPERCUT": {"bind": "l", "hold_ms": 50},
+    "CROSS": {"bind": "u", "hold_ms": 50},
+    "RIGHT HOOK": {"bind": "i", "hold_ms": 50},
+    "RIGHT UPPERCUT": {"bind": "o", "hold_ms": 50}
   },
   "tracking": {
     "JAB": {"bind": "mouse_left", "hold_ms": 150},
@@ -31,6 +33,6 @@
   "notes": [
     "normal: punches while the glove button is up. tracking: punches while it is held, when the right hand steers the mouse.",
     "defence: camera body states, held while they last. BLOCK is off while tracking unless aim.block_while_tracking is true.",
-    "Normal and defence keys are the Browser Boxing ones from browser_boxing.json."
+    "Normal punches are six different keys, one for each of the left arm's JAB, HOOK, UPPERCUT and the right arm's CROSS, RIGHT HOOK, RIGHT UPPERCUT, for a game with six attack buttons (such as Street Fighter's three punches and three kicks): map them in the game's own controls. Defence keys are the Browser Boxing ones from browser_boxing.json, which still has the old punch keys."
   ]
 }

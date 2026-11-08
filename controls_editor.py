@@ -40,7 +40,8 @@ TK_MOUSE = {1: "mouse_left", 2: "mouse_middle", 3: "mouse_right"}  # Tk's button
 NICE = {"mouse_left": "Left click", "mouse_right": "Right click", "mouse_middle": "Middle click",
         "bracketleft": "[", "bracketright": "]", "comma": ",", "period": ".", "semicolon": ";", "minus": "-",
         "equals": "=", "quote": "'", "grave": "`", "backslash": "\\", "slash": "/"}
-LABELS = {"JAB": "Jab", "HOOK": "Hook", "UPPERCUT": "Uppercut", "CROSS": "Cross (right glove)",
+LABELS = {"JAB": "Jab (left)", "HOOK": "Hook (left)", "UPPERCUT": "Uppercut (left)", "CROSS": "Cross (right)",
+          "RIGHT HOOK": "Hook (right)", "RIGHT UPPERCUT": "Uppercut (right)",
           "BLOCK": "Block", "DUCK": "Duck", "SLIP LEFT": "Slip left", "SLIP RIGHT": "Slip right",
           "GUARD DOWN": "Guard down"}
 
@@ -113,7 +114,9 @@ class Editor:
         body = ttk.Frame(self.root, padding=(8, 0))
         body.pack(fill="both", expand=True)
         self._bind_group(body, "Normal  (glove button up)", "normal", gi.PUNCHES, True).grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
-        self._bind_group(body, "Tracking  (glove button held)", "tracking", gi.PUNCHES, True).grid(row=0, column=1, sticky="nsew", padx=4, pady=4)
+        # while steering with the right hand only the left arm's punches (and the unused CROSS row) are in play
+        left_punches = [p for p in gi.PUNCHES if not p.startswith("RIGHT ")]
+        self._bind_group(body, "Tracking  (glove button held)", "tracking", left_punches, True).grid(row=0, column=1, sticky="nsew", padx=4, pady=4)
         self._bind_group(body, "Defence  (camera)", "defence", gi.DEFENCE, False).grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
         self._aim_group(body).grid(row=1, column=1, sticky="nsew", padx=4, pady=4)
         body.columnconfigure((0, 1), weight=1)
@@ -312,8 +315,9 @@ class Editor:
 
 DEFAULTS = {
     "game": "Default controls: edit with python controls_editor.py",
-    "normal": {"JAB": {"bind": "j", "hold_ms": 50}, "HOOK": {"bind": "h", "hold_ms": 50},
-               "UPPERCUT": {"bind": "u", "hold_ms": 50}, "CROSS": {"bind": "k", "hold_ms": 50}},
+    "normal": {"JAB": {"bind": "j", "hold_ms": 50}, "HOOK": {"bind": "k", "hold_ms": 50},
+               "UPPERCUT": {"bind": "l", "hold_ms": 50}, "CROSS": {"bind": "u", "hold_ms": 50},
+               "RIGHT HOOK": {"bind": "i", "hold_ms": 50}, "RIGHT UPPERCUT": {"bind": "o", "hold_ms": 50}},
     "tracking": {"JAB": {"bind": "mouse_left", "hold_ms": 150}, "HOOK": {"bind": "mouse_right", "hold_ms": 150},
                  "UPPERCUT": {"bind": "mouse_middle", "hold_ms": 150}},
     "defence": {"BLOCK": "w", "DUCK": "s", "SLIP LEFT": "a", "SLIP RIGHT": "d", "GUARD DOWN": "g"},
