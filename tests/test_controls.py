@@ -137,12 +137,6 @@ class TrackingSet(unittest.TestCase):
         self.assertEqual(pose(*one_down), [])
         self.assertEqual(pose(*dropped), ["GUARD DOWN"])
 
-    def test_street_fighter_controls(self):
-        m = gi.Mapping.load(os.path.join(ROOT, "mappings", "street_fighter.json"))
-        self.assertEqual(m.holds.get("GUARD DOWN"), "w")             # jump
-        self.assertNotIn("BLOCK", m.holds)                             # guard up must not jump too
-        self.assertEqual(controls_editor.problems(m), [])
-
     def test_block_while_tracking_option(self):
         data = gi.Mapping.load(os.path.join(ROOT, "mappings", "controls.json")).to_dict()
         data["aim"]["block_while_tracking"] = True

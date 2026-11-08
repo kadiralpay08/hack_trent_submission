@@ -158,7 +158,8 @@ class WhatMayRun(ServerCase):
         self.assertEqual(cmd, ["punch_live_both.py"])
         self.assertIn("no keys pressed", title)
         title, cmd = app_server.tool_live({"arm": "left", "live": True, "confidence": "0.5", "camera": 1})
-        self.assertEqual(cmd, ["punch_live.py", "--arm", "left", "--confidence", "0.5", "--live", "--camera", "1"])
+        # keys start on: the page already asked "Press keys for real?"
+        self.assertEqual(cmd, ["punch_live.py", "--arm", "left", "--confidence", "0.5", "--live", "--keys-on", "--camera", "1"])
         title, cmd = app_server.tool_live({"arm": "right", "phone": "10.0.0.2", "live": False})
         self.assertNotIn("--live", cmd)
 
@@ -192,12 +193,23 @@ class Controls(ServerCase):
         self.assertEqual(after["notes"], before["notes"])
         self.assertEqual(self.current()["normal"]["JAB"]["bind"], "f")
 
-    def test_two_punches_cannot_share_a_key(self):
+    def test_two_punches_may_share_a_key_with_a_warning(self):
+        """Allowed for a game with fewer punch buttons (Punch-Out!! has two), but the page is told."""
         body = self.payload()
         body["normal"]["JAB"]["bind"] = body["normal"]["HOOK"]["bind"]
-        status, error, _ = self.call("POST", "/api/controls", body)
-        self.assertEqual(status, 400)
-        self.assertIn("own key", error["error"])
+        status, saved, _ = self.call("POST", "/api/controls", body)
+        self.assertEqual(status, 200)
+        self.assertIn("more than one punch", saved["warning"])
+        body["normal"]["JAB"]["bind"] = "j" if body["normal"]["HOOK"]["bind"] != "j" else "q"
+        self.assertEqual(self.call("POST", "/api/controls", body)[1]["warning"], "")
+
+    def test_a_defence_move_can_have_no_key(self):
+        body = self.payload()
+        body["defence"]["BLOCK"] = ""
+        status, saved, _ = self.call("POST", "/api/controls", body)
+        self.assertEqual((status, saved["defence"]["BLOCK"]), (200, ""))
+        import game_input
+        self.assertNotIn("BLOCK", game_input.Mapping.load(app_server.CONTROLS_PATH).holds)
 
     def test_an_unknown_key_is_refused_with_the_list_of_good_ones(self):
         body = self.payload()

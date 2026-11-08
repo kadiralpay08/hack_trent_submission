@@ -77,6 +77,8 @@ def draw_popup(frame, arms, game):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--live", action="store_true", help="really press keys (default: only print them)")
+    parser.add_argument("--keys-on", action="store_true", help="with --live, start with key output ON instead of waiting for F8 "
+                        "(the control panel uses this once you have confirmed Press keys for real)")
     parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "controls.json"),
                         help="controls file (edit it with controls_editor.py)")
     parser.add_argument("--simulate", action="store_true", help="fake gloves on both arms (no hardware)")
@@ -99,7 +101,7 @@ def main():
     mapping = game_input.Mapping.load(args.mapping)
     keyboard = game_input.SendInputKeyboard() if args.live else game_input.DryRunKeyboard()
     game = game_input.GameInput(mapping, keyboard)
-    game.set_enabled(not args.live)  # a dry run is harmless, so it starts on; live starts off
+    game.set_enabled(not args.live or args.keys_on)  # a dry run is harmless, so it starts on; live waits for F8 unless --keys-on
 
     arms = []  # (arm, LiveSensors, LivePlay)
     for name, x in (("left", 10), ("right", 330)):

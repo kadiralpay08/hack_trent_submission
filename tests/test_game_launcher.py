@@ -258,21 +258,26 @@ class KeyLayouts(ServerCase):
         self.assertEqual(mapping.holds["BLOCK"], "up")
         self.assertNotIn("GUARD DOWN", mapping.holds, "guard down is left without a key, for body blows")
 
-    def test_the_live_tool_gets_the_preset_and_the_default_layout_is_untouched(self):
+    def test_play_always_uses_the_one_controls_file(self):
+        """One set of keys: the page's Play, the Controls page, the key editor and punch_live all use controls.json."""
         import app_server
-        title, cmd = app_server.tool_live({"arm": "both", "preset": "punchout"})
-        self.assertEqual(cmd[0], "punch_live_both.py")
-        self.assertEqual(cmd[cmd.index("--mapping") + 1], os.path.join(app_server.PRESETS_DIR, "punchout.json"))
-        title, cmd = app_server.tool_live({"arm": "left"})
-        self.assertNotIn("--mapping", cmd)
+        for p in ({"arm": "both", "preset": "punchout"}, {"arm": "left"}):
+            self.assertNotIn("--mapping", app_server.tool_live(p)[1])
+
+    def test_a_games_layout_is_copied_into_the_controls(self):
+        status, saved, _ = self.call("POST", "/api/controls/preset", {"preset": "punchout"})
+        self.assertEqual(status, 200)
+        self.assertEqual((saved["normal"]["JAB"]["bind"], saved["normal"]["CROSS"]["bind"]), ("x", "z"))
+        self.assertEqual(saved["defence"]["BLOCK"], "up")
+        self.assertEqual(saved["defence"]["GUARD DOWN"], "")
+        mapping = game_input.Mapping.load(__import__("app_server").CONTROLS_PATH)  # what play now presses
+        self.assertEqual((mapping.taps["JAB"], mapping.holds["BLOCK"]), ("x", "up"))
+        self.assertIn("tracking", self.call("GET", "/api/controls")[1])         # the rest of the file is kept
 
     def test_unknown_or_dangerous_presets_are_refused(self):
-        import app_server
         for bad in ("../controls", "nope", "punchout.json", "PUNCHOUT", "", "a b", 5):
-            if bad == "":
-                continue  # empty means no preset
-            with self.assertRaises(app_server.BadRequest, msg=str(bad)):
-                app_server.tool_live({"arm": "left", "preset": bad})
+            status, _, _ = self.call("POST", "/api/controls/preset", {"preset": bad})
+            self.assertEqual(status, 400, msg=str(bad))
 
 
 if __name__ == "__main__":
