@@ -17,6 +17,7 @@ import numpy as np
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 
+import hud
 import overlay
 
 MODEL_URL = (
@@ -124,16 +125,22 @@ def hands_dropped(world, sw_world):
 
 def draw(frame, img, vis, flash, now):
     h, w = frame.shape[:2]
+    k = h / 480
     px = (img * [w, h]).astype(int)
+    shadow, line = (24, 20, 18), (240, 236, 230)
     for a, b in CONNECTIONS:
         if vis[a] > 0.4 and vis[b] > 0.4:
-            cv2.line(frame, tuple(px[a]), tuple(px[b]), (0, 255, 0), 3)
+            cv2.line(frame, tuple(px[a]), tuple(px[b]), shadow, max(3, round(5 * k)), cv2.LINE_AA)
+            cv2.line(frame, tuple(px[a]), tuple(px[b]), line, max(2, round(2 * k)), cv2.LINE_AA)
+    wrists = {L_WR: hud.INFO, R_WR: hud.WARN}   # left arm blue, right arm amber, the same on every screen
     for i in (NOSE, L_SH, R_SH, L_EL, R_EL, L_WR, R_WR):
-        cv2.circle(frame, tuple(px[i]), 6, (0, 200, 255), -1)
+        big = i in wrists
+        cv2.circle(frame, tuple(px[i]), max(4, round((8 if big else 5) * k)), shadow, -1, cv2.LINE_AA)
+        cv2.circle(frame, tuple(px[i]), max(3, round((6 if big else 3.5) * k)), wrists.get(i, line), -1, cv2.LINE_AA)
     for side, idx in (("L", L_WR), ("R", R_WR)):
         text, t = flash[side]
         if now - t < 0.6:
-            overlay.outlined_text(frame, text, px[idx][0] + 10, px[idx][1] - 10, 0.9, (0, 0, 255), 2)
+            hud.pill(frame, text, px[idx][0] / k + 14, px[idx][1] / k - 34, hud.WARN, size=0.6)
 
 
 def draw_slips(frame, img, vis, states, state_keys=None):
@@ -151,11 +158,10 @@ def draw_slips(frame, img, vis, states, state_keys=None):
         if state not in states:
             continue
         x = min(max(x, 10 * k), w - 10 * k)
-        overlay.outlined_text(frame, state, x, y, 1.1 * k, (0, 255, 255), 3 * k, max_width=w / 2.5, align=align)
+        hud.pill(frame, state, x / k, y / k - 30, hud.TEXT, size=0.75, align=align, accent=hud.INFO, max_width=w / k / 2.5)
         key = state_keys(state) if state_keys else None
         if key:
-            overlay.outlined_text(frame, f"key {str(key).upper()}", x, y + 45 * k, 1.3 * k, (0, 255, 0), 3 * k,
-                                  align=align)
+            hud.pill(frame, f"key {str(key).upper()}", x / k, y / k + 4, hud.GOOD, size=0.8, align=align)
 
 
 def level(world):
@@ -345,22 +351,15 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
             if on_states:
                 on_states([])  # nobody in view: let go of any held keys
 
-        for n, text in enumerate(lines):
-            overlay.outlined_text(frame, text, 10, 30 + 30 * n, 0.8, (255, 255, 255), 2)
+        hud.status_row(frame, left=("   ".join(lines), hud.WARN if lines[0] == "no body detected" else hud.TEXT))
         if baseline is None:
-            overlay.outlined_text(frame, f"press C, then get in guard: it calibrates {calibrate_delay:g} s later",
-                                  10, frame.shape[0] - 15, 0.6, (0, 255, 255), 2)
+            hud.hint(frame, f"press C, then get in guard: it calibrates {calibrate_delay:g} s later", "left", hud.INFO)
         else:
             if now - calibrated_at < 1.5:
-                overlay.outlined_text(frame, "CALIBRATED", 10, frame.shape[0] - 45, 1.0, (0, 255, 0), 3)
-            overlay.outlined_text(frame, "C = recalibrate", 10, frame.shape[0] - 15, 0.5, (255, 255, 255), 1)
+                hud.pill(frame, "CALIBRATED", hud.width_of(frame) / 2, hud.TOP_ROW, hud.GOOD, size=0.55, align="centre")
+            hud.hint(frame, "C = recalibrate", "left")
         if calibrate_at is not None:  # big enough to read from a few metres, over the top of everything else
-            h, w = frame.shape[:2]
-            k = h / 480
-            overlay.outlined_text(frame, "GET IN GUARD", w / 2, h / 2 - 50 * k, 2.0 * k, (0, 255, 255), 4 * k,
-                                  max_width=w - 40 * k, align="centre")
-            overlay.outlined_text(frame, str(max(1, math.ceil(calibrate_at - now))), w / 2, h / 2 + 110 * k,
-                                  6.0 * k, (0, 255, 255), 10 * k, align="centre")
+            hud.countdown(frame, "Get in guard", max(1, math.ceil(calibrate_at - now)))
         if on_draw:
             on_draw(frame)
         cv2.imshow("Pose", overlay.finish_layer(frame, *window_size("Pose", frame)))

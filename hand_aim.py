@@ -177,28 +177,34 @@ class Tracking:
             return None
         return hand_offset(latest[1], latest[2])
 
-    def draw(self, frame, put, x=None, y=60, size=110):
-        """A small joystick picture in the top-right corner of the camera image while tracking."""
+    def draw(self, frame, put, x=None, y=168, size=104):
+        """A small joystick panel on the right of the camera image while tracking, under the main card. x, y and size
+        are in design pixels (a picture 480 high); put is kept so callers need not change."""
         if not self.held:
             return
         import cv2
+        import hud
         h, w = frame.shape[:2]
-        x = w - size - 20 if x is None else x
-        c = (x + size // 2, y + size // 2)
-        cv2.rectangle(frame, (x, y), (x + size, y + size), (0, 220, 0), 2)
-        dz = int(self.aim.settings.get("dead_zone", 0.06) / FULL * size / 2)
+        k = h / 480
+        W = hud.width_of(frame)
+        x = W - size - hud.MARGIN if x is None else x
+        hud.card(frame, x, y, size, size, accent=hud.GOOD, radius=8)
+        c = (int((x + size / 2) * k), int((y + size / 2) * k))
+        half = size / 2 * k - 10 * k       # keep the stick inside the panel
+        dz = int(self.aim.settings.get("dead_zone", 0.06) / FULL * half)
         if self.aim.settings.get("mode", "speed") == "speed" and dz > 0:
-            cv2.circle(frame, c, dz, (120, 120, 120), 1)
+            cv2.circle(frame, c, dz, hud.MUTED, 1, cv2.LINE_AA)
         offset = self.aim.offset
         if offset is not None:
             # the camera image is mirrored for display, so the boxer's right is on the right of the picture
-            px = int(np.clip(offset[0] / FULL, -1, 1) * size / 2)
-            py = int(np.clip(-offset[1] / FULL, -1, 1) * size / 2)
-            cv2.line(frame, c, (c[0] + px, c[1] + py), (0, 220, 0), 2)
-            cv2.circle(frame, (c[0] + px, c[1] + py), 6, (0, 255, 0), -1)
+            px = int(np.clip(offset[0] / FULL, -1, 1) * half)
+            py = int(np.clip(-offset[1] / FULL, -1, 1) * half)
+            cv2.line(frame, c, (c[0] + px, c[1] + py), hud.GOOD, max(2, round(2 * k)), cv2.LINE_AA)
+            cv2.circle(frame, (c[0] + px, c[1] + py), max(4, round(6 * k)), hud.GOOD, -1, cv2.LINE_AA)
         else:
-            put(frame, "no hand", y + size // 2, (0, 0, 255), 0.5, x=x + 8)
-        put(frame, f"TRACKING ({self.aim.settings.get('mode', 'speed')})", y - 8, (0, 255, 0), 0.5, x=x - 40)
+            hud.text(frame, "no hand", x + size / 2, y + size / 2 + 5, 0.5, hud.BAD, True, align="centre")
+        hud.text(frame, f"TRACKING ({self.aim.settings.get('mode', 'speed')})", x + size / 2, y + size - 8, 0.4, hud.MUTED,
+                 True, align="centre", max_width=size - 12)
 
     def close(self):
         self.driver.close()

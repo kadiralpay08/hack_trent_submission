@@ -52,6 +52,7 @@ import sys
 import threading
 import time
 
+import hud
 import punch_segment
 import punch_session as ps
 
@@ -107,10 +108,9 @@ class NameEntry:
             self.text += chr(k)
         return True
 
-    def draw(self, frame, top):
-        ps.put(frame, "WHO IS PUNCHING?", top, YELLOW, 1.2, thick=3)
-        ps.put(frame, f"name: {self.text}_", top + 45, WHITE, 1.0, thick=2)
-        ps.put(frame, "type it here, then press Enter (Backspace deletes)", top + 80, WHITE, 0.6)
+    def draw(self, frame, top=None):
+        hud.main_card(frame, "Who is punching?", f"{self.text}_", "type your name here, then press Enter (Backspace deletes)",
+                      accent=hud.INFO)
 
 
 class Capture:
@@ -273,18 +273,16 @@ class ButtonCapture(Capture):
                     self.say(f"{label} done! " + (f"next: {self.label}" if self.label else "ALL DONE"), GREEN)
 
     def on_draw(self, frame):
-        h = frame.shape[0]
-        top = 150
         if self.names.waiting:
-            self.names.draw(frame, top)
+            self.names.draw(frame)
             return
         if self.label:
-            ps.put(frame, f"{self.label}  {self.counts.get(self.label, 0)}/{self.target}", top, YELLOW, 1.1, thick=3)
-            ps.put(frame, f"hold button, punch {self.how[self.label]}, release", top + 32, (255, 255, 255), 0.6)
+            hud.main_card(frame, "Hold the button", self.label, f"punch {self.how[self.label]}, then release",
+                          accent=hud.INFO, title_colour=hud.INFO, right=f"{self.counts.get(self.label, 0)}/{self.target}")
         else:
-            ps.put(frame, "ALL DONE - train with python punch_train.py", top, GREEN, 0.8)
-        draw_common(self, frame, top + 58, self.press_t is not None)
-        ps.put(frame, "terminal: j/h/u switch punch, x undo, q quit  |  F11 full screen", h - ps.TEXT_BOTTOM, WHITE, 0.45)
+            hud.main_card(frame, "All done", "Nice work", "train with python punch_train.py", accent=hud.GOOD, title_colour=hud.GOOD)
+        draw_common(self, frame, self.press_t is not None)
+        hud.hint(frame, "terminal: j/h/u switch punch, x undo, q quit  |  F11 full screen")
 
 
 class PromptedCapture(Capture):
@@ -439,33 +437,34 @@ class PromptedCapture(Capture):
         return self.quit or self.phase == "done" and not self.pending and not self.none_pending
 
     def on_draw(self, frame):
-        h, now = frame.shape[0], time.time()
-        top = 150
+        now = time.time()
         if self.names.waiting:
-            self.names.draw(frame, top)
+            self.names.draw(frame)
             return
+        left = f"{max(0.0, (self.phase_end or now) - now):.0f}"   # no end time yet while waiting to start
         if self.phase == "waiting" or self.paused:
             reason = self.not_ready_reason()
-            title = "PAUSED" if self.paused else "READY TO RECORD"
-            ps.put(frame, title, top, ORANGE if self.paused else YELLOW, 1.1, thick=3)
-            if reason != "no glove data":  # that one already shows in red below
-                ps.put(frame, reason or "press . to " + ("carry on" if self.paused else "start"), top + 32,
-                       ORANGE if reason else (255, 255, 255), 0.7)
+            go_word = "carry on" if self.paused else "start"
+            kicker = "Paused" if self.paused else "Ready to record"
+            if reason and reason != "no glove data":  # that one already shows in red in the corner
+                hud.main_card(frame, kicker, reason, f"then press the  .  key to {go_word}", accent=hud.WARN, title_colour=hud.WARN)
+            else:
+                hud.main_card(frame, kicker, f"Press the  .  key to {go_word}", "stand in your guard first",
+                              accent=hud.WARN if self.paused else hud.INFO)
         elif self.phase == "announce":
-            ps.put(frame, f"GET IN GUARD - starting in {max(0.0, self.phase_end - now):.0f}", top, YELLOW, 1.0, thick=3)
+            hud.main_card(frame, "Get in guard", "Starting soon", "stand ready, hands up", accent=hud.INFO, right=left)
         elif self.phase == "rest":
-            ps.put(frame, "guard...", top, WHITE, 1.1, thick=3)
-            ps.put(frame, f"next: {self.prompt}", top + 32, WHITE, 0.6)
+            hud.main_card(frame, "Guard up", f"Next: {self.prompt}", self.how[self.prompt], accent=hud.INFO)
         elif self.phase == "go":
-            ps.put(frame, f"{self.prompt}!", top, GREEN, 2.0, thick=5)
-            ps.put(frame, self.how[self.prompt], top + 40, (255, 255, 255), 0.7)
+            hud.main_card(frame, "Now", self.prompt, self.how[self.prompt], accent=hud.GOOD, title_colour=hud.GOOD,
+                          right=f"{self.counts.get(self.prompt, 0)}/{self.target}")
         elif self.phase == "free":
-            ps.put(frame, f"MOVE, DON'T PUNCH  {max(0.0, self.phase_end - now):.0f}", top, ORANGE, 1.1, thick=3)
-            ps.put(frame, "shuffle, adjust your guard, bob, feint", top + 32, (255, 255, 255), 0.6)
+            hud.main_card(frame, "Free movement", "Move, don't punch", "shuffle, adjust your guard, bob, feint",
+                          accent=hud.WARN, title_colour=hud.WARN, right=left)
         elif self.phase == "done":
-            ps.put(frame, "ALL DONE - train with python punch_train.py", top, GREEN, 0.8)
-        draw_common(self, frame, top + 70, False)
-        ps.put(frame, ". start/pause  |  F11 full screen  |  terminal: x undo, q quit", h - ps.TEXT_BOTTOM, WHITE, 0.45)
+            hud.main_card(frame, "All done", "Nice work", "train with python punch_train.py", accent=hud.GOOD, title_colour=hud.GOOD)
+        draw_common(self, frame, False)
+        hud.hint(frame, ".  start / pause   |   F11  full screen   |   terminal: x undo, q quit")
 
 
 COMBO_S = 2.4   # two-arm mode: time to throw both punches of a combo, after the beep
@@ -717,54 +716,56 @@ class BothCapture:
 
     # --- screen ---
     def on_draw(self, frame):
-        h, now = frame.shape[0], time.time()
-        top = 150
+        now = time.time()
         if self.names.waiting:
-            self.names.draw(frame, top)
+            self.names.draw(frame)
             return
+        left = f"{max(0.0, (self.phase_end or now) - now):.0f}"   # no end time yet while waiting to start
         if self.phase == "waiting" or self.paused:
             reason = self.not_ready_reason()
-            ps.put(frame, "PAUSED" if self.paused else "READY TO RECORD (BOTH ARMS)", top,
-                   ORANGE if self.paused else YELLOW, 1.1, thick=3)
-            ps.put(frame, reason or "press . to " + ("carry on" if self.paused else "start"), top + 32,
-                   ORANGE if reason else (255, 255, 255), 0.7)
+            go_word = "carry on" if self.paused else "start"
+            kicker = "Paused" if self.paused else "Ready to record: both arms"
+            if reason:
+                hud.main_card(frame, kicker, reason, f"then press the  .  key to {go_word}", accent=hud.WARN, title_colour=hud.WARN)
+            else:
+                hud.main_card(frame, kicker, f"Press the  .  key to {go_word}", "stand in your guard first",
+                              accent=hud.WARN if self.paused else hud.INFO)
         elif self.phase == "announce":
-            ps.put(frame, f"GET IN GUARD - starting in {max(0.0, self.phase_end - now):.0f}", top, YELLOW, 1.0, thick=3)
+            hud.main_card(frame, "Get in guard", "Starting soon", "stand ready, hands up", accent=hud.INFO, right=left)
         elif self.phase == "rest":
-            ps.put(frame, "guard...", top, WHITE, 1.1, thick=3)
-            ps.put(frame, f"next: {combo_text(self.combo)}", top + 32, WHITE, 0.6)
+            hud.main_card(frame, "Guard up", "Next combo", combo_text(self.combo), accent=hud.INFO)
         elif self.phase == "go":
-            for i, (name, label) in enumerate(self.combo):
-                ps.put(frame, f"{i + 1}. {name.upper()} {label}!", top + 50 * i, GREEN if i == 0 else YELLOW, 1.4, thick=4)
+            hud.steps_card(frame, "Throw the combo", [(f"{i + 1}.  {name.upper()}  {label}!", hud.GOOD if i == 0 else hud.WARN)
+                                                      for i, (name, label) in enumerate(self.combo)])
         elif self.phase == "free":
-            ps.put(frame, f"MOVE, DON'T PUNCH  {max(0.0, self.phase_end - now):.0f}", top, ORANGE, 1.1, thick=3)
-            ps.put(frame, "shuffle, adjust your guard, bob, feint", top + 32, (255, 255, 255), 0.6)
+            hud.main_card(frame, "Free movement", "Move, don't punch", "shuffle, adjust your guard, bob, feint",
+                          accent=hud.WARN, title_colour=hud.WARN, right=left)
         elif self.phase == "done":
-            ps.put(frame, "ALL DONE - train each arm with punch_train.py --arm left / right", top, GREEN, 0.7)
-        row = top + 110
-        for name, rec in self.recorders.items():
-            totals = "  ".join(f"{k} {rec.counts.get(k, 0)}/{self.target}" for k in rec.arm.labels)
-            ps.put(frame, f"{name.upper():5}  {totals}  NONE {rec.counts.get(NONE, 0)}", row, WHITE, 0.55)
-            row += 24
-        ps.put(frame, "  ".join(f"{name} first: {n}" for name, n in self.first_counts.items()), row, WHITE, 0.5)
+            hud.main_card(frame, "All done", "Nice work", "train each arm with punch_train.py --arm left / right",
+                          accent=hud.GOOD, title_colour=hud.GOOD)
+        rows = [(name.upper(), [(k, rec.counts.get(k, 0)) for k in rec.arm.labels] + [("NONE", rec.counts.get(NONE, 0))])
+                for name, rec in self.recorders.items()]
+        hud.progress(frame, rows, self.target, "   ".join(f"{name} first: {n}" for name, n in self.first_counts.items()))
         missing = [name.upper() for name, rec in self.recorders.items() if not rec.sensors.glove_ok()]
         if missing:
-            ps.put(frame, f"NO {' / '.join(missing)} ARM DATA", row + 30, RED, 0.7)
+            hud.pill(frame, f"NO {' / '.join(missing)} ARM DATA", hud.width_of(frame) - hud.MARGIN, hud.TOP_ROW, hud.BAD,
+                     size=0.5, align="right")
         if now - self.result_t < 3:
-            ps.put(frame, self.result[:80], h - ps.TEXT_BOTTOM - 25, self.result_colour, 0.55)
-        ps.put(frame, ". start/pause  |  F11 full screen  |  terminal: x undo, q quit", h - ps.TEXT_BOTTOM, WHITE, 0.45)
+            hud.toast(frame, self.result, hud.tone(self.result_colour), rows=len(rows))
+        hud.hint(frame, ".  start / pause   |   F11  full screen   |   terminal: x undo, q quit")
 
 
-def draw_common(cap, frame, row, button_held):
-    h = frame.shape[0]
-    totals = "  ".join(f"{k} {cap.counts.get(k, 0)}/{cap.target}" for k in cap.arm.labels) + f"  NONE {cap.counts.get(NONE, 0)}"
-    ps.put(frame, totals, row, WHITE, 0.55)
+def draw_common(cap, frame, button_held):
+    """The recordings so far along the bottom, a warning in the corner if the glove is silent, and the last message."""
+    hud.progress(frame, [("", [(k, cap.counts.get(k, 0)) for k in cap.arm.labels] + [("NONE", cap.counts.get(NONE, 0))])],
+                 cap.target)
+    corner = hud.width_of(frame) - hud.MARGIN
     if not cap.sensors.glove_ok():
-        ps.put(frame, "NO GLOVE DATA", row + 30, RED, 0.7)
+        hud.pill(frame, "NO GLOVE DATA", corner, hud.TOP_ROW, hud.BAD, size=0.5, align="right")
     elif button_held:
-        ps.put(frame, "BUTTON HELD - recording", row + 30, RED, 0.8, thick=3)
+        hud.pill(frame, "BUTTON HELD: recording", corner, hud.TOP_ROW, hud.BAD, size=0.5, align="right")
     if time.time() - cap.result_t < 3:
-        ps.put(frame, cap.result[:75], h - ps.TEXT_BOTTOM - 25, cap.result_colour, 0.55)
+        hud.toast(frame, cap.result, hud.tone(cap.result_colour))
 
 
 def train_arm(arm, recorded):

@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 
+import hud
 import punch_segment
 import punch_session as ps
 
@@ -266,23 +267,27 @@ class Tuner:
         h, w = frame.shape[:2]
         s = self.sensors.settings
         now_t, now = self.sensors.latest_imu_t() or 0.0, time.time()
-        top = 150
+        settings = f"timeout {1000 * s.timeout_s:.0f} ms   |   start {s.start_g:g} g   |   brake {s.decel_g:g} g   |   punches {self.count}"
         if not self.sensors.glove_ok():
-            ps.put(frame, "NO GLOVE DATA (is it on, and on the same WiFi?)", top, RED, 0.7)
+            hud.main_card(frame, "Punch finder", "No glove data", "is it on, and on the same WiFi?", accent=hud.BAD, title_colour=hud.BAD)
         elif not self.sensors.segmenter.ready:
-            ps.put(frame, "hold the glove still for a moment...", top, ORANGE, 0.7)
+            hud.main_card(frame, "Punch finder", "Hold the glove still", settings, accent=hud.WARN, title_colour=hud.WARN)
         elif self.active is not None:
-            ps.put(frame, f"PUNCH STARTED  {1000 * (now_t - self.active.start_t):.0f} ms", top, GREEN, 1.0, thick=3)
+            hud.main_card(frame, "Punch finder", "Punch started", settings, accent=hud.GOOD, title_colour=hud.GOOD,
+                          right=f"{1000 * (now_t - self.active.start_t):.0f} ms")
         elif self.last is not None:
-            how = "STOPPED" if self.last.reason == "decel" else "TIMED OUT" if self.last.reason == "timeout" else "DATA GAP"
-            ps.put(frame, f"PUNCH ENDED: {how} after {1000 * self.last.duration:.0f} ms",
-                   top, BLUE if self.last.reason == "decel" else ORANGE, 0.8)
-        ps.put(frame, f"timeout {1000 * s.timeout_s:.0f} ms | start {s.start_g:g} g | brake {s.decel_g:g} g | punches {self.count}",
-               top + 28, WHITE, 0.55)
+            how = "Stopped" if self.last.reason == "decel" else "Timed out" if self.last.reason == "timeout" else "Data gap"
+            colour = hud.INFO if self.last.reason == "decel" else hud.WARN
+            hud.main_card(frame, "Last punch ended", how, settings, accent=colour, title_colour=colour,
+                          right=f"{1000 * self.last.duration:.0f} ms")
+        else:
+            hud.main_card(frame, "Punch finder", "Ready", settings, accent=hud.INFO, title_colour=hud.MUTED)
+        row = hud.CARD_TOP + hud.CARD_H + 10          # the next thing goes under the card, in design pixels
         if now - self.message_t < 3:
-            ps.put(frame, self.message[:75], top + 52, YELLOW, 0.5)
+            hud.pill(frame, self.message, hud.MARGIN, row, hud.WARN, size=0.5, bold=False, max_width=hud.width_of(frame) - 28)
+            row += 34
 
-        test, row = self.test, top + 85
+        test = self.test
         if test:
             state = test["state"]
             if state == "waiting":
@@ -299,18 +304,23 @@ class Tuner:
                 text, colour = f"TEST PAUSED: {test['left']:.0f} s left  seen {test['seen']}  (. resumes)", ORANGE
             else:
                 text, colour = "TEST: finishing...", YELLOW
-            ps.put(frame, text, row, colour, 0.75, thick=2)
+            hud.pill(frame, text, hud.MARGIN, row, hud.tone(colour), size=0.6, bold=True, max_width=hud.width_of(frame) - 28)
         elif self.report and now - self.report_t < 30:
-            for i, line in enumerate(self.report):
-                ps.put(frame, line[:80], row + 20 * i, YELLOW if line.startswith(("now", "best")) else WHITE, 0.45, thick=1)
+            lines = [line[:80] for line in self.report][:8]
+            card_w = min(hud.width_of(frame) - 28, 520)
+            hud.card(frame, hud.MARGIN, row, card_w, 16 + 21 * len(lines))
+            for i, line in enumerate(lines):
+                hud.text(frame, line, hud.MARGIN + 16, row + 26 + 21 * i, 0.46,
+                         hud.WARN if line.startswith(("now", "best")) else hud.TEXT, bold=line.startswith(("now", "best")),
+                         max_width=card_w - 32)
 
-        # The trace sits above the bottom strip, where pose_tracker shows calibration messages.
-        trace_bottom = h - ps.TEXT_BOTTOM - 22
-        ps.put(frame, "terminal: type a timeout in ms + Enter  |  . test start/pause  |  F11 full screen",
-               h - ps.TEXT_BOTTOM, WHITE, 0.45, thick=1)
+        # The acceleration trace sits above the bottom strip, where pose_tracker shows calibration messages.
+        k = h / 480
         times, values = self.sensors.recent_linear_g(3.0)
         ps.draw_trace(frame, times, values, now_t, 3.0, 12.0, self.marks,
-                      origin=(10, trace_bottom - 90), size=(w - 20, 90), threshold_g=s.start_g)
+                      origin=(int(hud.MARGIN * k), int(h - 150 * k)), size=(int(w - 2 * hud.MARGIN * k), int(90 * k)),
+                      threshold_g=s.start_g)
+        hud.hint(frame, "terminal: type a timeout in ms + Enter   |   .  test start / pause   |   F11  full screen")
 
 
 def main():
