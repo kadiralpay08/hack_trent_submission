@@ -11,3 +11,4 @@ firmware/*/build/
 firmware/*/config.h
 !models/punch_rf_right.joblib
 certs/
+mappings/launchers.json

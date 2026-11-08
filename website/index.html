@@ -1,19 +1,21 @@
 <!doctype html>
-<html lang="en" data-size="normal" data-contrast="auto" data-motion="auto">
+<html lang="en" data-size="normal" data-contrast="arcade" data-motion="auto">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Boxing controller</title>
-  <meta name="description" content="Set up, calibrate, record, train and play with the glove and camera boxing controller.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f4fd8'/%3E%3Ctext x='32' y='44' font-family='Arial' font-weight='900' font-size='34' text-anchor='middle' fill='white'%3EB%3C/text%3E%3C/svg%3E">
+  <title>Keyboard Warrior</title>
+  <meta name="description" content="Keyboard Warrior: throw real punches to play fighting games. Play, train and set up your glove and camera controller.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23d6001c'/%3E%3Ctext x='32' y='44' font-family='Arial' font-weight='900' font-size='34' text-anchor='middle' fill='white'%3EB%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="ui/ui.css">
 </head>
 <body>
   <a class="skip" href="#main">Skip to main content</a>
 
   <header class="site-header">
+    <div class="scene-band">
+    <div class="scene" id="scene" aria-hidden="true"></div>
     <div class="bar">
-      <p class="brand"><a href="#/home">Boxing controller</a></p>
+      <p class="brand"><a href="#/play">Keyboard Warrior</a></p>
       <details class="display" id="display">
         <summary>Display options</summary>
         <form class="display-form" aria-label="Display options" id="display-form">
@@ -25,9 +27,8 @@
           </select>
           <label for="opt-contrast">Colours</label>
           <select id="opt-contrast">
-            <option value="auto">Match my device</option>
+            <option value="arcade">Arcade (dark)</option>
             <option value="light">Light</option>
-            <option value="dark">Dark</option>
             <option value="high">High contrast</option>
           </select>
           <label for="opt-motion">Motion</label>
@@ -38,15 +39,12 @@
         </form>
       </details>
     </div>
+    </div>
     <nav aria-label="Main" id="nav">
       <ul>
-        <li><a href="#/home">Home</a></li>
-        <li><a href="#/setup">Setup guide</a></li>
-        <li><a href="#/calibrate">Calibrate</a></li>
-        <li><a href="#/record">Record</a></li>
-        <li><a href="#/train">Train</a></li>
-        <li><a href="#/recordings">Recordings</a></li>
         <li><a href="#/play">Play</a></li>
+        <li><a href="#/train">Train</a></li>
+        <li><a href="#/setup">Setup</a></li>
         <li><a href="#/controls">Controls</a></li>
         <li><a href="#/help">Help</a></li>
       </ul>
@@ -90,7 +88,7 @@
     </form>
   </dialog>
 
-  <noscript><p class="noscript">This control panel needs JavaScript. You can still run every tool from a terminal: see README.md.</p></noscript>
+  <noscript><p class="noscript">Keyboard Warrior needs JavaScript. You can still run every tool from a terminal: see README.md.</p></noscript>
   <script src="ui/ui.js"></script>
 </body>
 </html>

@@ -3,13 +3,13 @@ Hack Trent Boxing Submission
 
 A left-hand boxing controller. A motion sensor on the glove and a webcam watch each punch, a random forest decides whether it was a jab, hook or uppercut, and the laptop presses that punch's key in a boxing game. The team's plan and decisions are in [PROJECT.md](PROJECT.md).
 
-## Control panel: the easiest way in
+## Keyboard Warrior: the easiest way in
 
 ```powershell
 python app_server.py        # then open http://127.0.0.1:8770/ (it opens by itself)
 ```
 
-One page for the setup guide, camera calibration, recording, training, managing recordings, playing (Street Fighter and others) and choosing each punch's key. It starts the same tools described below, so everything here still works from a terminal. It is built to work with a keyboard, a screen reader, large text and high contrast. Kadir's webcam sparring game moved to `website/sparring.html`.
+Five pages: Play (open a game from a saved shortcut and start, up front), Train (record, train, manage recordings), Setup (guide, glove check, calibration), Controls (each punch's key) and Help. It starts the same tools described below, so everything here still works from a terminal. It is built to work with a keyboard, a screen reader, large text and high contrast. Kadir's webcam sparring game moved to `website/sparring.html`.
 
 ## Main pipeline: glove and camera with a trained model
 
