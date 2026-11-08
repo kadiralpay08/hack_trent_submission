@@ -69,12 +69,16 @@ def _held(frame, kind, args):
     return False
 
 
-def finish_layer(frame, width, height):
-    """The picture enlarged to fit width x height (at most MAX_UPSCALE times), with the held text drawn on it."""
+def finish_layer(frame, width, height, keep=False):
+    """The picture enlarged to fit width x height (at most MAX_UPSCALE times), with the held text drawn on it.
+    keep=True leaves the frame untouched and the text held, so the same picture can be finished again at another
+    size (the control panel page and the corner popup both show it)."""
     k = min(width / frame.shape[1], height / frame.shape[0], MAX_UPSCALE) if width > 0 and height > 0 else 1.0
-    out = cv2.resize(frame, None, fx=k, fy=k, interpolation=cv2.INTER_LINEAR) if k > 1.05 else frame
+    out = cv2.resize(frame, None, fx=k, fy=k, interpolation=cv2.INTER_LINEAR) if k > 1.05 else (frame.copy() if keep else frame)
     k = out.shape[0] / frame.shape[0]
-    items, _layer["frame"], _layer["items"] = _layer["items"], None, []
+    items = list(_layer["items"])
+    if not keep:
+        _layer["frame"], _layer["items"] = None, []
     for kind, (text, x, y, scale, colour, thickness, max_width, align, bold) in items:
         draw = outlined_text if kind == "outlined" else fit_text
         draw(out, text, x * k, y * k, scale * k, colour, thickness * k, max_width and max_width * k, align, bold)

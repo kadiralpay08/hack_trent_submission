@@ -292,7 +292,7 @@ def main():
                 tracking.draw(frame, ps.put)
 
     callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=fullscreen,
-                     state_keys=game.key_for_state)
+                     state_keys=game.key_for_state, keep_window=bool(popup))
 
     print(f"Model trained {clf.info['trained_at']} on {clf.info['counts']}, "
           f"cross-validated accuracy {100 * clf.info['cv_accuracy']:.0f}%.")

@@ -224,6 +224,12 @@ ol.steps > li::marker { color: var(--heading); font-weight: 800; }
 .job-state { margin: 0; color: var(--muted); grid-column: 1; }
 .job-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 0.5rem; flex-wrap: wrap; }
 #job-log-wrap { grid-column: 1 / -1; }
+.job-camera { grid-column: 1 / -1; margin: 0.5rem 0 0; }
+.job-camera[hidden] { display: none; }
+.camera-view { max-width: 60rem; margin: 0 auto; border: 3px solid var(--line); border-radius: var(--radius); background: #000; cursor: pointer; }
+.camera-view:focus-visible, .camera-view:focus { outline: 4px solid var(--focus); outline-offset: 3px; border-color: var(--focus); }
+.camera-view img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; }
+.job-camera figcaption { max-width: 60rem; margin: 0.5rem auto 0; color: var(--muted); }
 .log { margin: 0.5rem 0; padding: 0.75rem; max-height: 18rem; overflow: auto; background: #0c0f20; color: #cfeedd; border: 2px solid var(--edge); border-radius: var(--radius); font: 0.9rem/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
 :root[data-contrast="light"] .log { background: #1b2036; color: #e3f5ea; }
 :root[data-contrast="high"] .log { background: #000; color: #fff; border-color: #fff; }

@@ -171,7 +171,7 @@ def main():
 
     callbacks.update(ps.shared_pose_callbacks(*[s for _, s, _ in arms]))  # one camera feeds both arms
     callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=fullscreen,
-                     state_keys=game.key_for_state)
+                     state_keys=game.key_for_state, keep_window=bool(popup))
 
     print(f"Keys: {mapping.taps}")
     print("LIVE: keys go to the focused window." if args.live else "Dry run: nothing is pressed.")
