@@ -7,7 +7,7 @@
 Why it exists: a web page cannot press keys in another window, and Browser Boxing cannot be shown inside
 a page. The page tracks you with the webcam and sends this program the punch and body-state names; this
 program presses the keys the mapping file gives them (game_input.py, the same engine controller.py uses).
-It also serves the website, so http://127.0.0.1:8765/ is all you need.
+It also serves the website, so http://127.0.0.1:8765/sparring.html is all you need.
 
 Hotkeys, from any window, like controller.py:  F7 calibrate, F8 keys on or off, F9 keys off.
 
@@ -329,7 +329,7 @@ def main():
     if glove:
         threading.Thread(target=watch_glove, args=(bridge, stop), daemon=True).start()
 
-    url = f"http://127.0.0.1:{args.port}/"
+    url = f"http://127.0.0.1:{args.port}/sparring.html"  # the game page; the product control panel is app_server.py
     print(f"Game: {mapping.game}")
     print("LIVE: keys go to the focused window." if args.live else "Dry run: nothing is pressed, keys are only printed.")
     print("Glove: listening on UDP port 5005." if glove else "No glove (add --glove if you have one).")
