@@ -136,8 +136,9 @@ function renderJob(snap) {
   log.textContent = job.lines.join('\n');
   if (atEnd) log.scrollTop = log.scrollHeight;
   $('#job-title').textContent = snap.title;
+  showCamera(snap);
   let stateText;
-  if (snap.running) stateText = `Running for ${formatSeconds(Date.now() / 1000 - snap.started)}. Its camera window may be behind this one: check the taskbar.`;
+  if (snap.running) stateText = `Running for ${formatSeconds(Date.now() / 1000 - snap.started)}.` + (snap.camera ? ' Its camera is shown below.' : '');
   else if (snap.exit_code === 0) stateText = 'Finished.';
   else stateText = `Stopped (exit code ${snap.exit_code}). Open the output to see why.`;
   $('#job-state').textContent = stateText;
@@ -149,6 +150,43 @@ function renderJob(snap) {
     if (currentView && currentView.jobDone) currentView.jobDone();
   }
   job.wasRunning = snap.running;
+}
+
+// The running camera tool's picture, streamed through app_server.py (web_view.py), with its keys sent back.
+const camera = { started: null, retry: null };
+
+function showCamera(snap) {
+  const wrap = $('#job-camera-wrap');
+  const img = $('#job-camera');
+  if (!(snap.running && snap.camera)) {
+    if (camera.started !== null) { img.removeAttribute('src'); camera.started = null; clearTimeout(camera.retry); }
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  if (camera.started !== snap.started) {
+    camera.started = snap.started;
+    img.src = `/api/camera?t=${snap.started}`;
+  }
+}
+
+function wireCamera() {
+  const img = $('#job-camera');
+  // The tool takes a few seconds to load the pose model and open the camera: until then the stream is refused.
+  img.addEventListener('error', () => {
+    clearTimeout(camera.retry);
+    camera.retry = setTimeout(() => { if (camera.started !== null) img.src = `/api/camera?t=${camera.started}&r=${Date.now()}`; }, 1000);
+  });
+  const view = $('#camera-view');
+  view.addEventListener('click', () => view.focus());
+  view.addEventListener('keydown', async (event) => {
+    if (event.ctrlKey || event.altKey || event.metaKey || event.key === 'Tab') return;
+    const key = event.key;
+    const ok = ['Enter', 'Backspace', 'Escape', ' '].includes(key) || /^[A-Za-z0-9._-]$/.test(key);
+    if (!ok) return;
+    event.preventDefault();
+    try { await api('/api/camera/key', { key }); } catch (e) { announce(e.message); }
+  });
 }
 
 async function pollJob() {
@@ -459,7 +497,7 @@ function recordSection() {
       event.preventDefault();
       store.set('person', person.value); store.set('target', target.value); store.set('phone', phone.value); store.set('recArm', chosen());
       const ok = await runTool({ tool: 'capture', arm: chosen(), person: person.value, target: target.value, phone: phone.value.trim(), ...cam.values() }, 'Calibrate with C, then press the full stop key to start.');
-      result.replaceChildren(ok ? notice('ok', 'Recording opened. In its window press C to calibrate, get into guard during the countdown, then press the full stop (.) key to start.') : notice('bad', 'Could not start. Check your name is filled in and that no other tool is running.'));
+      result.replaceChildren(ok ? notice('ok', 'Recording started: its camera is at the top of the page. Click the picture, type your name and press Enter, press C and get into guard during the countdown, then press the full stop (.) key to start.') : notice('bad', 'Could not start. Check your name is filled in and that no other tool is running.'));
     } },
       h('fieldset', {}, h('legend', { text: 'Which arm?' }),
         arms.map((a) => h('div', { class: 'choice' }, a.input, h('label', { for: 'arm-' + a.value, text: labelFor[a.value] })))),
@@ -470,7 +508,7 @@ function recordSection() {
     h('h3', { text: 'How to throw each punch' }), how,
     h('h3', { text: 'During a recording' }),
     h('ul', {},
-      h('li', {}, h('kbd', { text: 'C' }), ' in the camera window calibrates (5 second countdown). The full stop key ', h('kbd', { text: '.' }), ' starts, pauses and resumes from any window.'),
+      h('li', {}, h('kbd', { text: 'C' }), ' in the camera picture at the top of the page calibrates (5 second countdown; click the picture first). The full stop key ', h('kbd', { text: '.' }), ' starts, pauses and resumes from any window.'),
       h('li', { text: 'Every 15 prompts is a “MOVE, DON’T PUNCH” round: shuffle, adjust your guard, feint. These teach the model to press nothing for movement that is not a punch.' }),
       h('li', {}, 'Made a mistake? Type ', h('kbd', { text: 'x' }), ' in the command box to undo the last punch. ', h('kbd', { text: 'q' }), ' finishes and trains. ', h('kbd', { text: 'discard' }), ' throws the whole session away.'),
       h('li', { text: 'Do not move the glove on your hand between sessions. The model learns how the glove sits.' })));
@@ -650,15 +688,15 @@ function viewSetup(root) {
       h('p', { text: 'Calibrating teaches the camera your stance, so it can tell your guard from a block or a duck. Do it each time you sit down to play, and whenever you move.' }),
       h('ol', { class: 'steps' },
         h('li', { text: 'Stand about 1.5 to 2 metres from the webcam, facing it, in your fighting guard.' }),
-        h('li', {}, 'Press ', h('strong', { text: 'Start the camera check' }), '. A camera window opens. If you cannot see it, check the taskbar or press Alt and Tab.'),
-        h('li', {}, 'In the camera window press ', h('kbd', { text: 'C' }), '. A 5 second countdown starts. Get into your guard and hold still until it ends.'),
+        h('li', {}, 'Press ', h('strong', { text: 'Start the camera check' }), '. The camera picture appears at the top of the page after a few seconds.'),
+        h('li', {}, 'Click the camera picture, then press ', h('kbd', { text: 'C' }), '. A 5 second countdown starts. Get into your guard and hold still until it ends.'),
         h('li', { text: 'Throw a few punches. Each punch’s start is marked green, and its end blue (it stopped) or orange (it timed out).' }),
         h('li', {}, 'To change the timeout (how long a punch may last), type a number of milliseconds such as ', h('kbd', { text: '350' }), ' in the command box that appears in the output bar, then ', h('kbd', { text: 'save' }), '. The timeout always needs the model retrained.'),
         h('li', {}, 'Finish with ', h('kbd', { text: 'q' }), ' in the command box, or the Stop button.')),
       h('form', { class: 'panel', 'aria-label': 'Start the camera check', onsubmit: async (event) => {
         event.preventDefault();
-        const ok = await runTool({ tool: 'calibrate', ...cam.values() }, 'Look for its camera window.');
-        calResult.replaceChildren(ok ? notice('ok', 'The camera check started. Press C in its window to calibrate.') : notice('bad', 'Could not start. Another tool may be running: stop it first.'));
+        const ok = await runTool({ tool: 'calibrate', ...cam.values() }, 'Its camera is at the top of the page.');
+        calResult.replaceChildren(ok ? notice('ok', 'The camera check started. Click its picture at the top of the page and press C to calibrate.') : notice('bad', 'Could not start. Another tool may be running: stop it first.'));
       } }, cam.node, h('div', { class: 'actions' }, h('button', { type: 'submit', class: 'btn primary', text: 'Start the camera check' })), calResult),
       notice('warn', 'Only one program can use the webcam at a time. Stop this before you record or play, and close other apps that use the camera.')));
 
@@ -864,6 +902,7 @@ async function start() {
   wireDisplay();
   drawScene();
   wireJobBar();
+  wireCamera();
   // Pages are #/name. The skip link's #main is not a page, so it must not trigger the router: it just moves focus.
   $('.skip').addEventListener('click', (event) => { event.preventDefault(); $('#main').focus(); });
   window.addEventListener('hashchange', () => { if (!location.hash || location.hash.startsWith('#/')) route(false); });

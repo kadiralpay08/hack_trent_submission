@@ -13,6 +13,7 @@ page (so another website you have open cannot drive it), and can only start the 
 with every option checked. Real key presses to a game need the "Press keys for real" tick.
 """
 import argparse
+import http.client
 import json
 import os
 import re
@@ -29,6 +30,7 @@ from urllib.parse import urlparse
 import game_input as gi
 import game_launcher
 import punch_session as ps
+import web_view
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.join(ROOT, "website")
@@ -44,6 +46,7 @@ NAME = re.compile(r"[\w][\w .'-]{0,39}")           # a person's name
 HOST = re.compile(r"[A-Za-z0-9][A-Za-z0-9.\-:]{0,63}")  # an address such as 192.168.137.252 or 192.168.137.252:8080
 COMMAND = re.compile(r"[\w .=\-]{1,60}")          # a line typed into capture or tune
 TYPED_TOOLS = ("capture", "calibrate")             # the tools that read typed commands
+CAMERA_TOOLS = ("calibrate", "capture", "live")    # the tools with a camera picture, shown in the page (web_view.py)
 PRESET = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")      # a game preset, mappings/presets/<name>.json
 SESSION = re.compile(r"[0-9A-Za-z_\-]{1,40}")
 
@@ -206,6 +209,7 @@ class Jobs:
         self.lines = deque(maxlen=LOG_LINES)
         self.count = 0          # lines ever written, so the page can ask for only the new ones
         self.stopped_by_user = False
+        self.view_port = None   # where the running camera tool serves its picture (web_view.py), or None
 
     def _write(self, text):
         with self.lock:
@@ -219,6 +223,10 @@ class Jobs:
         if self.running():
             raise BadRequest(f"“{self.title}” is still running. Stop it first, or finish it in its own window.")
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+        env.pop(web_view.ENV, None)
+        self.view_port = free_port() if tool in CAMERA_TOOLS else None
+        if self.view_port:
+            env[web_view.ENV] = str(self.view_port)  # the camera picture comes to this page, not to its own window
         with self.lock:
             self.lines.clear()
             self.count = 0
@@ -271,10 +279,38 @@ class Jobs:
             first = self.count - len(lines)
             since = max(since, first)
             return {"running": self.running(), "tool": self.tool, "title": self.title, "started": self.started,
-                    "exit_code": self.exit_code, "total": self.count, "typed": self.tool in TYPED_TOOLS, "from": since, "lines": lines[since - first:]}
+                    "exit_code": self.exit_code, "total": self.count, "typed": self.tool in TYPED_TOOLS,
+                    "camera": bool(self.view_port and self.running()), "from": since, "lines": lines[since - first:]}
+
+    def camera_port(self):
+        if not (self.view_port and self.running()):
+            raise BadRequest("No camera tool is running.")
+        return self.view_port
 
 
 JOBS = Jobs()
+
+
+def free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def send_key(name):
+    """Pass a key pressed in the page's camera view to the running camera tool, as if pressed in its window."""
+    if not isinstance(name, str) or web_view.key_code(name) is None:
+        raise BadRequest("That key does nothing in the camera view.")
+    port = JOBS.camera_port()
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+    try:
+        conn.request("POST", "/key", body=name.encode("utf-8"), headers={"Content-Type": "text/plain"})
+        if conn.getresponse().status != 204:
+            raise BadRequest("The camera tool did not take that key.")
+    except OSError:
+        raise BadRequest("The camera tool is still starting. Try again in a moment.")
+    finally:
+        conn.close()
 
 
 # ----------------------------------------------------------------------------------------------------
@@ -522,6 +558,8 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if path == "/api/status":
                 return self._json(status())
+            if path == "/api/camera":
+                return self._camera_stream()
             if path == "/api/job":
                 since = int(re.search(r"since=(\d+)", parts.query).group(1)) if re.search(r"since=(\d+)", parts.query) else 0
                 return self._json(JOBS.snapshot(since))
@@ -544,6 +582,33 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             return self._refuse(500, f"{type(e).__name__}: {e}")
         super().do_GET()
+
+    def _camera_stream(self):
+        """Relay the running camera tool's picture stream (web_view.py) to the page's <img>."""
+        port = JOBS.camera_port()
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        try:
+            conn.request("GET", "/stream")
+            upstream = conn.getresponse()
+        except OSError:
+            conn.close()
+            raise BadRequest("The camera tool is still starting.")
+        try:
+            if upstream.status != 200:
+                raise BadRequest("The camera tool is not showing a picture yet.")
+            self.send_response(200)
+            self.send_header("Content-Type", upstream.getheader("Content-Type", "application/octet-stream"))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            while True:
+                chunk = upstream.read1(65536)
+                if not chunk:
+                    break  # the tool ended
+                self.wfile.write(chunk)
+        except (ConnectionError, OSError):
+            pass  # the page went away, or the tool ended mid-picture
+        finally:
+            conn.close()
 
     # --- POST
     def do_POST(self):
@@ -568,6 +633,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ok": True, "title": title})
             if path == "/api/input":
                 JOBS.send(str(body.get("line", "")).strip())
+                return self._json({"ok": True})
+            if path == "/api/camera/key":
+                send_key(body.get("key"))
                 return self._json({"ok": True})
             if path == "/api/launchers":
                 return self._json(save_launcher(body))

@@ -19,6 +19,7 @@ from mediapipe.tasks.python import vision
 
 import hud
 import overlay
+import web_view
 
 MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
@@ -46,7 +47,9 @@ BOTTOM_RESERVED = 70     # pixels at the bottom of the camera image kept for the
 
 
 def set_fullscreen(on, window="Pose"):
-    """Switch the camera window between full screen and a normal window."""
+    """Switch the camera window between full screen and a normal window (nothing to do when shown in the page)."""
+    if web_view.active():
+        return
     cv2.setWindowProperty(window, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN if on else cv2.WINDOW_NORMAL)
 
 
@@ -269,13 +272,19 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
 
     smooth_img, smooth_world = Smoother(0.6), Smoother(0.7)
     yaw = 0.0  # 3D view rotation
-    cv2.namedWindow("Pose", cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # resizable, so it can go full screen
-    if fullscreen:
-        set_fullscreen(True)
+    # Started from the control panel (app_server.py): the picture and its keys go to the page, and no window opens.
+    web = web_view.from_env()
+    if web:
+        show_3d, fullscreen = False, False
+        print("Showing the camera in the control panel page.")
+    else:
+        cv2.namedWindow("Pose", cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # resizable, so it can go full screen
+        if fullscreen:
+            set_fullscreen(True)
     if show_3d:
         cv2.namedWindow("3D skeleton")
         cv2.moveWindow("3D skeleton", 700, 50)  # beside the camera window, not on top of it
-    sized = fullscreen or not big_window  # the big window is sized once the first frame shows the camera's resolution
+    sized = web or fullscreen or not big_window  # the big window is sized once the first frame shows the camera's resolution
     history = deque(maxlen=5)  # (time, wrist-relative-to-shoulder, wrist-below-elbow), ~0.2 s
     baseline = None
     calibrated_at = -10.0  # when the last calibration happened, for the on-screen flash
@@ -362,13 +371,16 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
             hud.countdown(frame, "Get in guard", max(1, math.ceil(calibrate_at - now)))
         if on_draw:
             on_draw(frame)
-        cv2.imshow("Pose", overlay.finish_layer(frame, *window_size("Pose", frame)))
+        if web:
+            web.show(overlay.finish_layer(frame, *web_view.SIZE))
+        else:
+            cv2.imshow("Pose", overlay.finish_layer(frame, *window_size("Pose", frame)))
         if not sized:
             fit_window("Pose", frame.shape[1], frame.shape[0])
             sized = True
         if on_frame and on_frame():
             break
-        key = cv2.waitKey(1) & 0xFF
+        key = web.key() if web else cv2.waitKey(1) & 0xFF
         if key != 255 and on_key and on_key(key):
             key = 255  # the tool used it (for example typing a name), so it is not a shortcut here
         if key == ord("c") or bool(want_calibrate and want_calibrate()):
@@ -396,6 +408,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     if on_states:
         on_states([])
     cap.release()
+    if web:
+        web.close()
     cv2.destroyAllWindows()
 
 

@@ -54,6 +54,12 @@
   <section class="jobbar" id="jobbar" aria-label="Running tool" hidden>
     <p class="job-title" id="job-title"></p>
     <p class="job-state" id="job-state"></p>
+    <figure class="job-camera" id="job-camera-wrap" hidden>
+      <div class="camera-view" id="camera-view" tabindex="0" aria-describedby="camera-help">
+        <img id="job-camera" alt="Live camera picture from the running tool, with its punch and calibration messages">
+      </div>
+      <figcaption id="camera-help">Click the picture (or Tab to it), then press <kbd>C</kbd> to calibrate and get into guard during the countdown. Recording: type your name and press <kbd>Enter</kbd> when asked, then <kbd>.</kbd> starts and pauses. <kbd>F8</kbd> turns key output on or off, from any window.</figcaption>
+    </figure>
     <div class="job-actions">
       <button type="button" id="job-stop" class="btn danger">Stop</button>
       <button type="button" id="job-toggle" class="btn" aria-expanded="false" aria-controls="job-log-wrap">Show output</button>
