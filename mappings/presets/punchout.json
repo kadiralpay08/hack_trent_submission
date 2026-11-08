@@ -1,0 +1,24 @@
+{
+  "game": "Mike Tyson's Punch-Out!! (browser game on RetroVault)",
+  "normal": {
+    "JAB": {"bind": "x", "hold_ms": 80},
+    "HOOK": {"bind": "x", "hold_ms": 80},
+    "UPPERCUT": {"bind": "enter", "hold_ms": 80},
+    "CROSS": {"bind": "z", "hold_ms": 80},
+    "RIGHT HOOK": {"bind": "z", "hold_ms": 80},
+    "RIGHT UPPERCUT": {"bind": "enter", "hold_ms": 80}
+  },
+  "defence": {
+    "BLOCK": "up",
+    "DUCK": "down",
+    "SLIP LEFT": "left",
+    "SLIP RIGHT": "right",
+    "GUARD DOWN": ""
+  },
+  "notes": [
+    "Keys from the game's page: X left punch, Z right punch, hold Up for head shots, Left and Right dodge, Down ducks, Enter fires the star uppercut. The page says 'up, left, right, down' without naming the arrow keys, so these are read as the arrow keys: check them in the game's own control settings.",
+    "Punch-Out has two punches, so the left arm's jab and hook both throw X, the right arm's cross and hook both throw Z, and both uppercuts fire the star uppercut (Enter, only with a star).",
+    "Hands up (BLOCK) holds Up, so punches go to the head. Drop both hands (GUARD DOWN, no key) for body blows.",
+    "This is a preset: it is passed to punch_live.py with --mapping and does not change mappings/controls.json."
+  ]
+}
