@@ -5,7 +5,7 @@
   python punch_live.py --simulate     fake glove (no hardware), to try the tool
   python punch_live.py --live --popup camera as a small always-on-top corner window, so the game stays visible
 
-Punches (glove and camera together, via the model from punch_train.py): JAB = J, HOOK = H, UPPERCUT = U.
+Punches (glove and camera together, via the model from punch_train.py): left arm JAB = J, HOOK = K, UPPERCUT = L; right arm CROSS = U, HOOK = I, UPPERCUT = O.
 Defence (camera only, as in controller.py): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D, GUARD DOWN = G.
 Keys come from mappings/controls.json; change them with python controls_editor.py (saved changes apply
 while this runs). Movement the model calls NONE (not a punch), and any punch it is unsure about,
@@ -48,8 +48,9 @@ GREEN, ORANGE, WHITE, YELLOW = (0, 220, 0), (0, 150, 255), (255, 255, 255), (0, 
 class LivePlay:
     """One arm: its glove, its model, and the keys its punches press. punch_live_both.py runs two."""
 
-    def __init__(self, sensors, classifier, game, log=print, name="", x=10, scale=1.0, footer=True):
+    def __init__(self, sensors, classifier, game, log=print, name="", x=10, scale=1.0, footer=True, arm=None):
         self.sensors, self.clf, self.game, self.log = sensors, classifier, game, log
+        self.arm = arm           # which arm this is, so its punches get their own keys
         self.name, self.x, self.scale, self.footer = name, x, scale, footer  # where this arm draws its text
         self.waiting = []        # finished punches waiting for their last camera frame
         self.shown, self.shown_t = "", 0.0
@@ -70,6 +71,12 @@ class LivePlay:
             self.waiting.remove(item)
             self.decide(*item)
 
+    def action(self, label):
+        """The controls-file name for this arm's punch: the right arm's HOOK and UPPERCUT have entries of their own,
+        and fall back to the plain name for a controls file that has none (such as Browser Boxing's)."""
+        name = self.arm.action(label) if self.arm else label
+        return name if self.game.key_for(name) else label
+
     def decide(self, seg, seen_at):
         pre = self.clf.segment.pre_s
         imu, pose = self.sensors.window(seg.start_t - pre - 0.05, seg.end_t + 0.01)
@@ -87,8 +94,8 @@ class LivePlay:
             return
         if not self.game.enabled:
             note = "output OFF, press F8"
-        elif self.game.punch(label):
-            note = f"{'tracking ' if self.game.tracking else ''}{self.game.key_for(label)}"
+        elif self.game.punch(self.action(label)):
+            note = f"{'tracking ' if self.game.tracking else ''}{self.game.key_for(self.action(label))}"
         else:
             note = "no key mapped, or key already down"
         self.show(f"{label} {100 * conf:.0f}%  ({note})", GREEN)
@@ -213,7 +220,7 @@ def main():
     game.set_enabled(not args.live)  # a dry run is harmless, so it starts on; live starts off
 
     sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=args.port, arm=arm, phone=ps.phone_for(args))
-    play = LivePlay(sensors, clf, game)
+    play = LivePlay(sensors, clf, game, arm=arm)
     tracking = None
     if not args.no_tracking:
         import hand_aim

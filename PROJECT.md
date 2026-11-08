@@ -32,9 +32,14 @@ Left hand only. Features and data collection depend on these definitions:
 
 | Punch | Motion | Key |
 |---|---|---|
-| Jab | Straight forward | `J` |
-| Left hook | Left, then forward, then right | `H` |
-| Uppercut | Arm moves down, then up | `U` |
+| Jab (left) | Straight forward | `J` |
+| Left hook | Left, then forward, then right | `K` |
+| Uppercut (left) | Arm moves down, then up | `L` |
+| Cross (right) | Straight forward | `U` |
+| Right hook | Right, then forward, then left | `I` |
+| Uppercut (right) | Arm moves down, then up | `O` |
+
+The six punches have six different keys, one for each of a fighting game's three punch and three kick buttons, so each arm's punches can be mapped in the game (the left arm's three, and the right arm's three). The right arm's hook and uppercut are `RIGHT HOOK` and `RIGHT UPPERCUT` in the controls file.
 
 Defence keys: block `W`, duck `S`, slip left `A`, slip right `D`, guard down (both hands dropped) `G`. These are in `mappings/controls.json`, editable with `controls_editor.py`.
 

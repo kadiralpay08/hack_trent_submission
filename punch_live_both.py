@@ -5,8 +5,8 @@ running side by side, with one camera for both.
   python punch_live_both.py --live --windowed  really presses keys, with the game visible beside it
   python punch_live_both.py --simulate         fake gloves on both arms (no hardware)
 
-Left arm (port 5005, models/punch_rf.joblib):        JAB = J, HOOK = H, UPPERCUT = U
-Right arm (port 5006, models/punch_rf_right.joblib): CROSS = K, HOOK = H, UPPERCUT = U
+Left arm (port 5005, models/punch_rf.joblib):        JAB = J, HOOK = K, UPPERCUT = L
+Right arm (port 5006, models/punch_rf_right.joblib): CROSS = U, HOOK = I, UPPERCUT = O  (six different keys)
 Defence (camera): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D, GUARD DOWN = G. Keys from mappings/controls.json (python controls_editor.py).
 If one arm has no trained model yet, the other still plays on its own.
 
@@ -63,7 +63,8 @@ def main():
         clf = ps.Classifier(arm.model_path, args.confidence)
         phone = args.right_phone if name == "right" else None
         sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=arm.port, arm=arm, phone=phone)
-        play = punch_live.LivePlay(sensors, clf, game, name=f"{name.upper()}: ", x=x, scale=0.65, footer=not arms)
+        play = punch_live.LivePlay(sensors, clf, game, name=f"{name.upper()}: ", x=x, scale=0.65, footer=not arms,
+                                   arm=arm)
         arms.append((arm, sensors, play))
         print(f"{name} arm: model trained {clf.info['trained_at']} on {clf.info['counts']}, "
               f"timeout {1000 * clf.segment.timeout_s:.0f} ms, "

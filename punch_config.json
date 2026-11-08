@@ -2,7 +2,7 @@
   "_note": "Shared punch settings. punch_tune.py saves the segment settings here.",
   "segment": {
     "timeout_s": 0.35,
-    "start_g": 2.5,
+    "start_g": 1.5,
     "decel_g": 3.0,
     "settle_g": 1.5,
     "settle_s": 0.02,
