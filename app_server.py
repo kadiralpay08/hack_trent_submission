@@ -27,11 +27,15 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import game_input as gi
+import game_launcher
 import punch_session as ps
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.join(ROOT, "website")
 CONTROLS_PATH = os.path.join(ROOT, "mappings", "controls.json")
+PRESETS_DIR = os.path.join(ROOT, "mappings", "presets")
+LAUNCHERS_PATH = game_launcher.CONFIG_PATH
+GAMES_PATH = os.path.join(SITE, "ui", "games.json")
 DEFAULT_PORT = 8770
 LOG_LINES = 600
 MAX_BODY = 64 * 1024
@@ -40,6 +44,7 @@ NAME = re.compile(r"[\w][\w .'-]{0,39}")           # a person's name
 HOST = re.compile(r"[A-Za-z0-9][A-Za-z0-9.\-:]{0,63}")  # an address such as 192.168.137.252 or 192.168.137.252:8080
 COMMAND = re.compile(r"[\w .=\-]{1,60}")          # a line typed into capture or tune
 TYPED_TOOLS = ("capture", "calibrate")             # the tools that read typed commands
+PRESET = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")      # a game preset, mappings/presets/<name>.json
 SESSION = re.compile(r"[0-9A-Za-z_\-]{1,40}")
 
 
@@ -146,6 +151,11 @@ def tool_live(p):
         if not 0.05 <= value <= 0.99:
             raise BadRequest("Confidence must be between 0.05 and 0.99.")
         cmd += ["--confidence", str(value)]
+    preset = p.get("preset")
+    if preset:
+        if not isinstance(preset, str) or not PRESET.fullmatch(preset) or not os.path.isfile(os.path.join(PRESETS_DIR, preset + ".json")):
+            raise BadRequest("That game's key layout was not found.")
+        cmd += ["--mapping", os.path.join(PRESETS_DIR, preset + ".json")]
     if live:
         cmd.append("--live")
     else:
@@ -384,6 +394,79 @@ def save_controls(body):
 
 
 # ----------------------------------------------------------------------------------------------------
+# Games: key layouts for particular games, and shortcuts that open them
+# ----------------------------------------------------------------------------------------------------
+def read_presets():
+    out = {}
+    for path in sorted(glob_presets()):
+        name = os.path.splitext(os.path.basename(path))[0]
+        if not PRESET.fullmatch(name):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        out[name] = {"game": data.get("game", name), "normal": data.get("normal", {}), "defence": data.get("defence", {}),
+                     "notes": data.get("notes", [])}
+    return out
+
+
+def glob_presets():
+    import glob
+    return glob.glob(os.path.join(PRESETS_DIR, "*.json"))
+
+
+def launchable_games():
+    """{game id: its launch settings} for the games on the page that are opened by a program on this computer."""
+    try:
+        with open(GAMES_PATH, encoding="utf-8") as f:
+            games = json.load(f)["games"]
+    except (OSError, ValueError, KeyError):
+        return {}
+    return {g["id"]: g["launch"] for g in games if isinstance(g.get("launch"), dict) and g.get("id")}
+
+
+def need_game(body_or_query):
+    game = body_or_query
+    games = launchable_games()
+    if game not in games:
+        raise BadRequest("That game does not have a shortcut.")
+    return games[game]
+
+
+def launchers_status():
+    saved = game_launcher.load(LAUNCHERS_PATH)
+    return {"games": {g: saved.get(g) for g in launchable_games()}}
+
+
+def save_launcher(body):
+    need_game(body.get("game"))
+    config = game_launcher.load(LAUNCHERS_PATH)
+    if body.get("clear"):
+        config.pop(body["game"], None)
+    else:
+        try:
+            config[body["game"]] = game_launcher.clean_entry(body.get("kind"), body.get("value"), body.get("label"))
+        except ValueError as e:
+            raise BadRequest(str(e))
+    game_launcher.save(config, LAUNCHERS_PATH)
+    return launchers_status()
+
+
+def open_game(body):
+    need_game(body.get("game"))
+    entry = game_launcher.load(LAUNCHERS_PATH).get(body["game"])
+    if not entry:
+        raise BadRequest("Set up this game's shortcut first.")
+    try:
+        game_launcher.launch(entry)
+    except OSError as e:
+        raise BadRequest(str(e))
+    return {"ok": True, "label": entry.get("label", "")}
+
+
+# ----------------------------------------------------------------------------------------------------
 # The web server
 # ----------------------------------------------------------------------------------------------------
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; "
@@ -446,6 +529,14 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"sessions": sessions(), "deleted": sessions(deleted=True)})
             if path == "/api/controls":
                 return self._json(read_controls())
+            if path == "/api/presets":
+                return self._json(read_presets())
+            if path == "/api/launchers":
+                return self._json(launchers_status())
+            if path == "/api/launchers/find":
+                match = re.search(r"game=([a-z0-9-]+)", parts.query)
+                launch = need_game(match.group(1) if match else None)
+                return self._json({"candidates": game_launcher.find(launch.get("search", []))})
             if path.startswith("/api/"):
                 return self._refuse(404, "No such page.")
         except BadRequest as e:
@@ -478,6 +569,10 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/input":
                 JOBS.send(str(body.get("line", "")).strip())
                 return self._json({"ok": True})
+            if path == "/api/launchers":
+                return self._json(save_launcher(body))
+            if path == "/api/launch":
+                return self._json(open_game(body))
             if path == "/api/stop":
                 return self._json({"ok": True, "stopped": JOBS.stop()})
             if path == "/api/controls":

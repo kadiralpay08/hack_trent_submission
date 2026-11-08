@@ -237,6 +237,8 @@ async function viewPlay(root) {
   try { games = (await (await fetch('ui/games.json', { cache: 'no-store' })).json()).games; } catch { /* shown below */ }
   let controls = null;
   try { controls = await api('/api/controls'); } catch { /* shown below */ }
+  let presets = {};
+  try { presets = await api('/api/presets'); } catch { /* games without a preset use the Controls page */ }
   if (!games.length) { root.append(pageHeading('Keyboard Warrior'), notice('bad', 'The games list could not be loaded.')); return {}; }
 
   const result = h('div');
@@ -255,6 +257,86 @@ async function viewPlay(root) {
   const press = h('input', { id: 'press', type: 'checkbox' });
   const startButton = h('button', { type: 'submit', class: 'btn fight' });
   const form = h('form', { class: 'panel', 'aria-label': 'Start the controller' });
+
+  // --- opening the game: a saved shortcut (a program, Steam, a launcher or a web address) or a plain link
+  const launchBox = h('div', { class: 'launch' });
+  const launchResult = h('div');
+  let launchSaved = {};
+  let found = null;       // candidates from "Find it on this computer"
+  let setupOpen = false;
+
+  async function loadLaunchers() {
+    try { launchSaved = (await api('/api/launchers')).games; } catch { launchSaved = {}; }
+    drawLaunch();
+  }
+
+  async function saveShortcut(g, body) {
+    try {
+      launchSaved = (await api('/api/launchers', { game: g.id, ...body })).games;
+      found = null; setupOpen = false;
+      drawLaunch();
+      launchResult.replaceChildren(notice('ok', body.clear ? 'Shortcut removed.' : `Shortcut saved. Press Open ${g.name} to start it.`));
+      announce(body.clear ? 'Shortcut removed.' : 'Shortcut saved.');
+    } catch (e) { launchResult.replaceChildren(notice('bad', e.message)); announce(`Not saved. ${e.message}`); }
+  }
+
+  function setupPanel(g, saved) {
+    const kind = h('select', { id: 'launch-kind' },
+      h('option', { value: 'file', text: 'Program file (.exe) or shortcut (.lnk)' }),
+      h('option', { value: 'steam', text: 'Steam game (app id number)' }),
+      h('option', { value: 'url', text: 'Web address' }));
+    const value = h('input', { id: 'launch-value', type: 'text', autocomplete: 'off', spellcheck: 'false' });
+    const list = h('div');
+    if (found) {
+      list.replaceChildren(found.length
+        ? h('form', { onsubmit: (event) => {
+          event.preventDefault();
+          const pick = found[Number((list.querySelector('input[name=cand]:checked') || {}).value)];
+          if (pick) saveShortcut(g, { kind: pick.kind, value: pick.value, label: pick.label });
+        } }, h('fieldset', {}, h('legend', { text: 'Found on this computer' }),
+          found.map((c, i) => h('div', { class: 'choice' }, h('input', { type: 'radio', name: 'cand', id: 'cand-' + i, value: String(i), checked: i === 0 }),
+            h('div', {}, h('label', { for: 'cand-' + i, text: c.label }), h('p', { class: 'help', text: c.source })))),
+          h('button', { type: 'submit', class: 'btn primary', text: 'Use the selected one' })))
+        : notice('warn', `Nothing called “${g.launch.name}” was found. Use the box below to say where it is.`));
+    }
+    return h('details', { open: setupOpen },
+      h('summary', { text: saved ? `Change the ${g.launch.name} shortcut` : `Set up the ${g.launch.name} shortcut` }),
+      h('p', { class: 'help', text: 'Do this once. It is remembered on this computer only.' }),
+      h('button', { type: 'button', class: 'btn', text: 'Find it on this computer', onclick: async () => {
+        list.replaceChildren(notice('ok', 'Looking…'));
+        try { found = (await api('/api/launchers/find?game=' + encodeURIComponent(g.id))).candidates; } catch (e) { found = null; list.replaceChildren(notice('bad', e.message)); return; }
+        setupOpen = true; drawLaunch();
+        announce(found.length ? `Found ${found.length}.` : 'Nothing found.');
+      } }), list,
+      h('form', { class: 'panel', 'aria-label': 'Say where the game is', onsubmit: (event) => { event.preventDefault(); saveShortcut(g, { kind: kind.value, value: value.value }); } },
+        h('div', { class: 'field' }, h('label', { for: 'launch-kind', text: 'Or say where it is' }), kind),
+        h('div', { class: 'field' }, h('label', { for: 'launch-value', text: 'Path, app id or address' }), value,
+          h('p', { class: 'help', text: 'For example C:\\Games\\StreetFighter\\game.exe, or 1364780 for a Steam game, or https://… for a browser game.' })),
+        h('div', { class: 'actions' }, h('button', { type: 'submit', class: 'btn primary', text: 'Save the shortcut' }),
+          saved ? h('button', { type: 'button', class: 'btn danger', text: 'Remove the shortcut', onclick: () => saveShortcut(g, { clear: true }) }) : h('span'))));
+  }
+
+  function drawLaunch() {
+    const g = gameNow();
+    launchBox.replaceChildren();
+    launchResult.replaceChildren();
+    if (g.link) {
+      launchBox.append(h('div', { class: 'actions' }, h('a', { class: 'btn primary', href: g.link, target: '_blank', rel: 'noopener noreferrer', text: g.linkLabel || `Open ${g.name} (new tab)` })));
+      return;
+    }
+    if (!g.launch) return;
+    const saved = launchSaved[g.id];
+    if (saved) {
+      launchBox.append(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn primary', text: `Open ${g.name}`, onclick: async () => {
+        try {
+          const done = await api('/api/launch', { game: g.id });
+          launchResult.replaceChildren(notice('ok', `Opening ${done.label || g.name}. Give it a moment to load, then use the fight button below.`));
+          announce(`Opening ${g.name}.`);
+        } catch (e) { launchResult.replaceChildren(notice('bad', e.message)); announce(`Could not open it. ${e.message}`); }
+      } })), h('p', { class: 'help', text: `Opens: ${saved.label}` }));
+    }
+    launchBox.append(launchResult, setupPanel(g, saved));
+  }
 
   function drawPreflight() {
     const st = state.status;
@@ -289,23 +371,26 @@ async function viewPlay(root) {
   function drawDetail() {
     const g = gameNow();
     store.set('game', g.id);
+    const layout = g.preset && presets[g.preset] ? presets[g.preset] : controls;
     const rows = [];
-    if (controls) for (const [action, spec] of Object.entries(controls.normal)) rows.push([action, WHAT[action] || '', spec.bind, (g.suggest || {})[action] || '']);
+    if (layout) for (const [action, spec] of Object.entries(layout.normal)) rows.push([action, WHAT[action] || '', spec.bind, (g.suggest || {})[action] || '']);
     const showSuggest = rows.some((r) => r[3]);
-    detail.replaceChildren(
-      h('p', { class: 'lead', text: g.summary }),
-      g.link ? h('p', {}, h('a', { class: 'btn primary', href: g.link, target: '_blank', rel: 'noopener', text: 'Open the sparring game (new tab)' })) : h('span'));
+    detail.replaceChildren(h('p', { class: 'lead', text: g.summary }));
     keys.replaceChildren(
       h('ol', { class: 'steps' }, g.steps.map((s) => h('li', { text: s }))),
-      g.arm !== 'none' && controls ? h('div', {},
-        h('div', { class: 'table-wrap' }, h('table', {}, h('caption', { text: 'Punches: bind each key in the game’s controls' }),
+      g.arm !== 'none' && layout ? h('div', {},
+        h('div', { class: 'table-wrap' }, h('table', {}, h('caption', { text: g.preset ? 'Punches: keys already set up for this game' : 'Punches: bind each key in the game’s controls' }),
           h('thead', {}, h('tr', {}, ['Punch', 'Motion', 'Key', showSuggest ? 'Suggested in game' : null].filter(Boolean).map((t) => h('th', { scope: 'col', text: t })))),
           h('tbody', {}, rows.map((r) => h('tr', {}, h('th', { scope: 'row', text: r[0] }), h('td', { text: r[1] }), h('td', {}, h('kbd', { text: r[2].toUpperCase() })), showSuggest ? h('td', { text: r[3] }) : null))))),
         h('div', { class: 'table-wrap' }, h('table', {}, h('caption', { text: 'Defence: held while your body does it' }),
           h('thead', {}, h('tr', {}, ['Move', 'Key'].map((t) => h('th', { scope: 'col', text: t })))),
-          h('tbody', {}, Object.entries(controls.defence).map(([a, k]) => h('tr', {}, h('th', { scope: 'row', text: a }), h('td', {}, h('kbd', { text: k.toUpperCase() }))))))),
-        h('p', {}, 'Change any of these on the ', h('a', { href: '#/controls', text: 'Controls page' }), '.')) : h('span'));
+          h('tbody', {}, Object.entries(layout.defence).map(([a, k]) => h('tr', {}, h('th', { scope: 'row', text: a }), h('td', {}, k ? h('kbd', { text: k.toUpperCase() }) : 'No key')))))),
+        g.preset
+          ? h('p', { class: 'help', text: 'This is a ready-made layout for this game, so the Controls page does not change it.' })
+          : h('p', {}, 'Change any of these on the ', h('a', { href: '#/controls', text: 'Controls page' }), '.')) : h('span'));
     if (g.arm !== 'none') arms.find((a) => a.value === (g.arm === 'both' ? armNow() : g.arm)).input.checked = true;
+    found = null; setupOpen = false;
+    drawLaunch();
     syncForm();
   }
 
@@ -316,7 +401,7 @@ async function viewPlay(root) {
       const ok = await confirmDialog('Press keys for real?', 'The controller will press real keys in whichever window has focus. After it starts, click on your game window. Stop it any time with the Stop button.', 'Start with keys on');
       if (!ok) return;
     }
-    const started = await runTool({ tool: 'live', arm: armNow(), phone: phone.value.trim(), confidence: confidence.value, live: press.checked, ...cam.values() }, press.checked ? 'Click your game window now.' : 'Keys are not being pressed.');
+    const started = await runTool({ tool: 'live', arm: armNow(), phone: phone.value.trim(), confidence: confidence.value, live: press.checked, preset: gameNow().preset, ...cam.values() }, press.checked ? 'Click your game window now.' : 'Keys are not being pressed.');
     result.replaceChildren(started
       ? notice('ok', press.checked ? 'Running with keys on. Click your game window now so it has focus.' : 'Practice started. Nothing is pressed; the output shows what each punch would press.')
       : notice('bad', 'Could not start. A tool may already be running, or a model may be missing: train it first.'));
@@ -341,11 +426,13 @@ async function viewPlay(root) {
     verdict,
     h('fieldset', { class: 'games' }, h('legend', { text: 'Choose your game' }),
       radios.map((r) => h('div', { class: 'game' }, h('div', { class: 'choice' }, r.input, h('div', {}, h('label', { for: 'game-' + r.game.id, text: r.game.name }), h('p', { class: 'help', text: r.game.kind })))))),
+    launchBox,
     form,
     section('sec-check', 'Pre-fight check', fighters),
     section('sec-setup', 'Set up your game', detail, keys),
     notice('warn', 'The camera is used by the controller while it runs. Close calibration and recording first, and any other app using the webcam. You open the game yourself, then click on its window after you start.'));
   drawDetail();
+  loadLaunchers();
   return { update: drawPreflight };
 }
 
@@ -706,6 +793,53 @@ async function route(first) {
   if (!first) { const title = $('#page-title'); (title || main).focus(); window.scrollTo(0, 0); }
 }
 
+// ------------------------------------------------------------------ pixel boxers (decoration in the header)
+// A tiny sprite as rows of letters: h hair, s skin, k eyes, g glove, t top, p shorts, w shoes, . nothing.
+const BOXER = [
+  '....hhhh....',
+  '...hhhhhh...',
+  '...ssssss...',
+  '.ggskssksgg.',
+  '.ggssssssgg.',
+  '.gg.ssss.gg.',
+  '..g.tttt.g..',
+  '..tttttttt..',
+  '..tttttttt..',
+  '...tttttt...',
+  '...pppppp...',
+  '..pppppppp..',
+  '..pppppppp..',
+  '..pp....pp..',
+  '...ss..ss...',
+  '...ss..ss...',
+  '...ss..ss...',
+  '..www..www..',
+];
+
+function drawBoxer(kind) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${BOXER[0].length} ${BOXER.length}`);
+  svg.setAttribute('class', `boxer boxer-${kind}`);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  BOXER.forEach((row, y) => {
+    for (const m of row.matchAll(/([a-z])\1*/g)) {  // one rectangle per run of the same letter
+      const rect = document.createElementNS(ns, 'rect');
+      rect.setAttribute('x', m.index); rect.setAttribute('y', y);
+      rect.setAttribute('width', m[0].length); rect.setAttribute('height', 1);
+      rect.setAttribute('class', `px-${m[1]}`);
+      svg.append(rect);
+    }
+  });
+  return svg;
+}
+
+function drawScene() {
+  const scene = $('#scene');
+  if (scene) scene.append(drawBoxer('a'), drawBoxer('b'));
+}
+
 // ------------------------------------------------------------------ display options
 function applyDisplay() {
   const root = document.documentElement;
@@ -728,6 +862,7 @@ function wireDisplay() {
 
 async function start() {
   wireDisplay();
+  drawScene();
   wireJobBar();
   // Pages are #/name. The skip link's #main is not a page, so it must not trigger the router: it just moves focus.
   $('.skip').addEventListener('click', (event) => { event.preventDefault(); $('#main').focus(); });

@@ -9,7 +9,7 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch e
 python app_server.py        # then open http://127.0.0.1:8770/ (it opens by itself)
 ```
 
-Five pages: Play (start a game, up front), Train (record, train, manage recordings), Setup (guide, glove check, calibration), Controls (each punch's key) and Help. It starts the same tools described below, so everything here still works from a terminal. It is built to work with a keyboard, a screen reader, large text and high contrast. Kadir's webcam sparring game moved to `website/sparring.html`.
+Five pages: Play (open a game from a saved shortcut and start, up front), Train (record, train, manage recordings), Setup (guide, glove check, calibration), Controls (each punch's key) and Help. It starts the same tools described below, so everything here still works from a terminal. It is built to work with a keyboard, a screen reader, large text and high contrast. Kadir's webcam sparring game moved to `website/sparring.html`.
 
 ## Main pipeline: glove and camera with a trained model
 
