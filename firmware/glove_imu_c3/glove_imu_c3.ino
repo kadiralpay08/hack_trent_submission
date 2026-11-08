@@ -46,7 +46,12 @@ const uint32_t I2C_CLOCK_HZ = 400000;
 const uint16_t I2C_TIMEOUT_MS = 5;
 
 const int FRAME_SIZE = 19;
-const int FRAMES_PER_PACKET = 10;  // 10 frames at 500 Hz = 50 packets/s and 20 ms of delay
+// 25 frames at 500 Hz = 20 packets/s and 50 ms of delay. Two gloves share one WiFi channel, and with 10 frames
+// (50 packets/s each) they crowded each other out while boxing: fewer, larger packets need far less airtime.
+#ifndef GLOVE_FRAMES_PER_PACKET
+#define GLOVE_FRAMES_PER_PACKET 25
+#endif
+const int FRAMES_PER_PACKET = GLOVE_FRAMES_PER_PACKET;
 const int QUEUE_FRAMES = 100;
 const uint32_t STATUS_PERIOD_MS = 5000;
 const uint32_t CONFIG_CHECK_MS = 250;
