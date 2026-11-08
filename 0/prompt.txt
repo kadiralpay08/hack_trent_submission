@@ -1,0 +1,471 @@
+ok I want to collect more data. lets do different sides separately
+
+---
+
+Can you merge everything to main
+
+---
+
+I'vve just conneted an esp32-c3 with oled to my computer, i have the mpu9050 that also doesnt have the magnometer like the one used on the esp32cam connected with scl to pin 3 and sda to pin 1, i want you to upload a sketch which reads the MPU data in the standard configuration outlined in the project and sends it over the usb point, and checks if the data is actually coming through
+
+---
+
+are you sure youre not making the data up
+
+---
+
+ok it works, now make it go over wifi, use the andrews laptop previously used ssid
+
+---
+
+flash to the esp32 thats plugged in, and then run it as a left arm controller for now
+
+---
+
+is this over wifi or serial?
+
+---
+
+<task-notification>
+<task-id>bbstuezro</task-id>
+<tool-use-id>toolu_016ia1Pt13ej9gFsk3onK85H</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bbstuezro.output</output-file>
+<status>completed</status>
+<summary>Monitor "left-arm controller startup and errors" stream ended</summary>
+<event>no output after 50 s
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+WARNING: Logging before InitGoogle() is written to STDERR
+W0000 00:00:1794116305.968540   27236 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1794116305.981192   27236 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1794116306.976216   33744 landmark_projection_calculator.cc:81] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bmhr2ju1c</task-id>
+<tool-use-id>toolu_01CMhGnGari7FtPmoDqKuKDL</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bmhr2ju1c.output</output-file>
+<status>completed</status>
+<summary>Background command "Run the left-arm live controller" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+here is the wifi data, run the flash command to the esp32 by doing ipconfig/checking my local ip and flashing it to esp32
+
+---
+
+im running it right now, before you were getting datas connected over the usb port
+
+---
+
+close the useless punch_live
+
+---
+
+it still says no glove data
+
+---
+
+its ip probably changed, i turned it on and off
+
+---
+
+also what ip adress is the esp32-s3 targetting?
+
+---
+
+still reading as no glove data
+
+---
+
+plugged
+
+---
+
+its connected to three NIMH batteries in a pack is that enough?
+
+---
+
+Ok it reads it, i now need another script for the exact same combo of hardware but for another S3, i have two of them.
+
+---
+
+is there a particular orientation the IMU needs to be in when calibrating? sometimes the accuray is above 90% sometimes its barely above 50
+
+---
+
+board is plugged in
+
+---
+
+left one is showing no glove data, did you do sonethin>
+
+---
+
+Works now, we want to retrain, does the current trainer train each arm seperately in one program? if so have it run for 20 of each punch for each arm
+
+---
+
+merge all this to main
+
+---
+
+ok left controller is out of commission for now collect only right footage
+
+---
+
+train pls
+
+---
+
+ok do that then
+
+---
+
+done
+
+---
+
+also can you lower the threshold for punches from 2.5 to 1.5
+
+---
+
+record new. we have the left one now too
+
+---
+
+it's already at 20
+
+---
+
+it's already past 20. it says 21/20
+
+---
+
+it keeps flashing no left arm data / no right arm data
+
+---
+
+so what do you want me to do
+
+---
+
+I'll answer for you: the flashes take up most of the time. especially left. they do matter
+
+---
+
+so waht do you need me to do
+
+---
+
+it's closed. Each board is powered by battery
+
+---
+
+<task-notification>
+<task-id>bapro91hd</task-id>
+<tool-use-id>toolu_01NE7a6UBusFtooAeAoEJwJP</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bapro91hd.output</output-file>
+<status>completed</status>
+<summary>Background command "Record both gloves' gaps for 40 s while punching" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+i only started boxing halfway thro
+
+---
+
+left board connected
+
+---
+
+test the left one first to see if that was even the issue
+
+---
+
+<task-notification>
+<task-id>bp37mf0rq</task-id>
+<tool-use-id>toolu_01EHPWNXY1jWDdGXCiXQ1EC4</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bp37mf0rq.output</output-file>
+<status>completed</status>
+<summary>Background command "Record both gloves' gaps for 60 s while boxing" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+hold up are you sure that's not just an issue with the connection
+
+---
+
+try getting readings out of left
+
+---
+
+connected
+
+---
+
+why should that matter? if i unplug this right now and replug it to the battery why should it matter
+
+---
+
+ok check now
+
+---
+
+<task-notification>
+<task-id>b12ro7kie</task-id>
+<tool-use-id>toolu_016MHQMPbHDW57yEucTDoc9h</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\b12ro7kie.output</output-file>
+<status>completed</status>
+<summary>Background command "Watch left board's USB and hotspot state for 90 s" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+ok i will go back to capturing data
+
+---
+
+it says no right arm dat
+
+---
+
+ok plugged in
+
+---
+
+even now why is the connection so unreliable? we are using a pack of 3 1.2v nmih batteries
+
+---
+
+should we put in 1.5 v batteries
+
+---
+
+also restart the training session clear the data from it this one was bad
+
+---
+
+did you delete the session?
+
+---
+
+remove this session it was also bad
+
+---
+
+ok now train just right
+
+---
+
+ok now punch live test for right
+
+---
+
+<task-notification>
+<task-id>b46odr27x</task-id>
+<tool-use-id>toolu_01Hfa41RHqzJ37yVsWm7sZ2b</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\b46odr27x.output</output-file>
+<status>completed</status>
+<summary>Background command "Run the right-arm live controller" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+do you think it could be the hotspot has bad connecivity
+
+---
+
+ok the train thing is already full for the right, i suspect be cause you didnt delete the previous ones
+
+---
+
+when i train on just right it works fine with minor blips every now and hen. do you think the left and right are interfering with each other in some way
+
+---
+
+it was off i believe
+
+---
+
+<task-notification>
+<task-id>bpuig2t42</task-id>
+<tool-use-id>toolu_01RTkiV7Mx69cU8mrikhp67a</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bpuig2t42.output</output-file>
+<status>completed</status>
+<summary>Background command "Record right glove gaps for 45 s, left off" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+my teammate is working on the left right now so for now can you train on right footage
+
+---
+
+lets collect more data its not very confident in live
+
+---
+
+ok train on the new stuff please
+
+---
+
+yo its not recognizing any punches in the live
+
+---
+
+<task-notification>
+<task-id>b3k2rj1e0</task-id>
+<tool-use-id>toolu_01UQK9nwo399r3muEJo97AzB</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\b3k2rj1e0.output</output-file>
+<status>completed</status>
+<summary>Background command "Run the right-arm live controller with logged output" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+ok it works now but thats odd it didnt when i was doing it
+
+---
+
+ok great is the left connected because if so i'd like to train that now
+
+---
+
+ok train pls
+
+---
+
+py punch_live.py --live
+
+---
+
+<task-notification>
+<task-id>b80uq2r3n</task-id>
+<tool-use-id>toolu_0136ih4mLJXL2t5MQQWYDqqR</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\b80uq2r3n.output</output-file>
+<status>failed</status>
+<summary>Background command "Run the left-arm live controller" failed with exit code 1</summary>
+</task-notification>
+
+---
+
+ok now i want to play street fighter what are the keybinds did we set that up
+
+---
+
+ok can you start the keybinds pls
+
+---
+
+is it up?
+
+---
+
+i'm testing both together and i'm getting stretches of no glove data
+
+---
+
+ok do it
+
+---
+
+<task-notification>
+<task-id>bvrct70z4</task-id>
+<tool-use-id>toolu_019vSmn6PZyhCg2fnWKkZekz</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bvrct70z4.output</output-file>
+<status>completed</status>
+<summary>Background command "Record both gloves' gaps for 45 s, both on" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+could there be an issue in the code for applications with both
+
+---
+
+it still received 92 percent of the packages though whereas when i was live it was majority no glove data
+
+---
+
+right one pluged in
+
+---
+
+plugged
+
+---
+
+<task-notification>
+<task-id>b35zal7r2</task-id>
+<tool-use-id>toolu_01NcAhnSj5gesaZPvzEjSYRX</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\b35zal7r2.output</output-file>
+<status>completed</status>
+<summary>Background command "Record both gloves' gaps for 60 s after the fix" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+ok can you make a mini window in the corner that is punch_live so i can see whats happening while I play street fighter?
+
+---
+
+ok i stopped it
+
+---
+
+ok it works but the text is sall. can you make it so that when it has a prediction it puts it in big text
+
+---
+
+back to spamming no data
+
+---
+
+it's not letting me move left or right
+
+---
+
+it's not movingleft or right. it's connected to the swipe left / right
+
+---
+
+ok let me run it on my side please
+
+---
+
+<task-notification>
+<task-id>b886dqlea</task-id>
+<tool-use-id>toolu_015uVLEjrVnJqCTojBrVyCZ7</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\b886dqlea.output</output-file>
+<status>completed</status>
+<summary>Background command "Open the keybind editor window" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+ok it seems to work. can you have guard down as jump please
+
+---
+
+also why is the popup dark
+
+---
+
+ok i see why guard was on jump now and not guard down but like it was still a bit annoying to accidentally jump while having your guard up because you're getting ready for a punch
+
+---
+
+when i click off the thing it no longer lets me recalibrate
+
+---
+
+ok can you commit and merge please
+
+---
+
+reflash the left one with the computers personal hotspot details, its  conencted noww
