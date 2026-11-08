@@ -200,6 +200,8 @@ class ControlsWatcher:
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--live", action="store_true", help="really press keys (default: only print them)")
+    parser.add_argument("--keys-on", action="store_true", help="with --live, start with key output ON instead of waiting for F8 "
+                        "(the control panel uses this once you have confirmed Press keys for real)")
     ps.add_arm_argument(parser)
     ps.add_phone_argument(parser)
     parser.add_argument("--model", help="trained model (default: the arm's model file)")
@@ -243,7 +245,7 @@ def main():
     mapping = game_input.Mapping.load(args.mapping)
     keyboard = game_input.SendInputKeyboard() if args.live else game_input.DryRunKeyboard()
     game = game_input.GameInput(mapping, keyboard)
-    game.set_enabled(not args.live)  # a dry run is harmless, so it starts on; live starts off
+    game.set_enabled(not args.live or args.keys_on)  # a dry run is harmless, so it starts on; live waits for F8 unless --keys-on
 
     sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=args.port, arm=arm, phone=ps.phone_for(args))
     play = LivePlay(sensors, clf, game, arm=arm)

@@ -409,7 +409,7 @@ async function viewPlay(root) {
   function drawDetail() {
     const g = gameNow();
     store.set('game', g.id);
-    const layout = g.preset && presets[g.preset] ? presets[g.preset] : controls;
+    const layout = controls;  // one set of keys: what this table shows is what play presses
     const rows = [];
     if (layout) for (const [action, spec] of Object.entries(layout.normal)) rows.push([action, WHAT[action] || '', spec.bind, (g.suggest || {})[action] || '']);
     const showSuggest = rows.some((r) => r[3]);
@@ -417,15 +417,22 @@ async function viewPlay(root) {
     keys.replaceChildren(
       h('ol', { class: 'steps' }, g.steps.map((s) => h('li', { text: s }))),
       g.arm !== 'none' && layout ? h('div', {},
-        h('div', { class: 'table-wrap' }, h('table', {}, h('caption', { text: g.preset ? 'Punches: keys already set up for this game' : 'Punches: bind each key in the game’s controls' }),
+        h('div', { class: 'table-wrap' }, h('table', {}, h('caption', { text: 'Punches: your keys (bind each one in the game’s controls)' }),
           h('thead', {}, h('tr', {}, ['Punch', 'Motion', 'Key', showSuggest ? 'Suggested in game' : null].filter(Boolean).map((t) => h('th', { scope: 'col', text: t })))),
           h('tbody', {}, rows.map((r) => h('tr', {}, h('th', { scope: 'row', text: r[0] }), h('td', { text: r[1] }), h('td', {}, h('kbd', { text: r[2].toUpperCase() })), showSuggest ? h('td', { text: r[3] }) : null))))),
         h('div', { class: 'table-wrap' }, h('table', {}, h('caption', { text: 'Defence: held while your body does it' }),
           h('thead', {}, h('tr', {}, ['Move', 'Key'].map((t) => h('th', { scope: 'col', text: t })))),
           h('tbody', {}, Object.entries(layout.defence).map(([a, k]) => h('tr', {}, h('th', { scope: 'row', text: a }), h('td', {}, k ? h('kbd', { text: k.toUpperCase() }) : 'No key')))))),
-        g.preset
-          ? h('p', { class: 'help', text: 'This is a ready-made layout for this game, so the Controls page does not change it.' })
-          : h('p', {}, 'Change any of these on the ', h('a', { href: '#/controls', text: 'Controls page' }), '.')) : h('span'));
+        h('p', {}, 'These are the same keys as the ', h('a', { href: '#/controls', text: 'Controls page' }), ', the desktop key editor and punch_live from a terminal: change them in any one and all of them follow.'),
+        g.preset && presets[g.preset]
+          ? h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', text: `Use ${g.name}’s ready-made keys`, onclick: async () => {
+            try {
+              controls = await api('/api/controls/preset', { preset: g.preset });
+              announce(`${g.name}’s keys are now your keys.`);
+              drawDetail();
+            } catch (e) { announce(`Not changed: ${e.message}`); }
+          } }))
+          : null) : h('span'));
     if (g.arm !== 'none') arms.find((a) => a.value === (g.arm === 'both' ? armNow() : g.arm)).input.checked = true;
     found = null; setupOpen = false;
     drawLaunch();
@@ -437,10 +444,10 @@ async function viewPlay(root) {
     store.set('playArm', armNow()); store.set('phone', phone.value); store.set('confidence', confidence.value);
     store.set('popup', popup.checked ? '1' : '0');
     if (press.checked) {
-      const ok = await confirmDialog('Press keys for real?', 'The controller will press real keys in whichever window has focus. After it starts, click on your game window. Stop it any time with the Stop button.', 'Start with keys on');
+      const ok = await confirmDialog('Press keys for real?', 'The controller will press real keys in whichever window has focus, from the moment it starts. Click on your game window straight after. F8 turns key output off and on; the Stop button ends it.', 'Start with keys on');
       if (!ok) return;
     }
-    const started = await runTool({ tool: 'live', arm: armNow(), phone: phone.value.trim(), confidence: confidence.value, live: press.checked, popup: popup.checked, preset: gameNow().preset, ...cam.values() }, press.checked ? 'Click your game window now.' : 'Keys are not being pressed.');
+    const started = await runTool({ tool: 'live', arm: armNow(), phone: phone.value.trim(), confidence: confidence.value, live: press.checked, popup: popup.checked, ...cam.values() }, press.checked ? 'Click your game window now.' : 'Keys are not being pressed.');
     result.replaceChildren(started
       ? notice('ok', press.checked ? 'Running with keys on. Click your game window now so it has focus.' : 'Practice started. Nothing is pressed; the output shows what each punch would press.')
       : notice('bad', 'Could not start. A tool may already be running, or a model may be missing: train it first.'));
@@ -713,12 +720,26 @@ function viewControls(root) {
   const inputs = {};
   let data = null;
   root.append(pageHeading('Controls'),
-    h('p', { class: 'lead', text: 'Choose the key each punch and defence move presses. Each punch needs its own key, so each of the six can be bound to its own button in a game. Changes apply to a running controller within a second.' }),
+    h('p', { class: 'lead', text: 'Choose the key each punch and defence move presses. Give each punch its own key, so each of the six can be bound to its own button in a game. Changes apply to a running controller within a second.' }),
     result, body);
 
+  let layouts = [];  // games with a ready-made key layout: [{ id, name, preset }]
   async function load() {
     try { data = await api('/api/controls'); } catch (e) { body.replaceChildren(notice('bad', e.message)); return; }
+    try {
+      const [games, presets] = await Promise.all([fetch('ui/games.json', { cache: 'no-store' }).then((r) => r.json()), api('/api/presets')]);
+      layouts = games.games.filter((g) => g.preset && presets[g.preset]);
+    } catch { layouts = []; }
     draw();
+  }
+
+  async function usePreset(g) {
+    try {
+      data = await api('/api/controls/preset', { preset: g.preset });
+      result.replaceChildren(notice('ok', `${g.name}’s keys are now your keys.`));
+      announce(`${g.name}’s keys are now your keys.`);
+      draw();
+    } catch (e) { result.replaceChildren(notice('bad', e.message)); announce(`Not changed. ${e.message}`); }
   }
 
   function keyInput(id, value, label) {
@@ -742,7 +763,9 @@ function viewControls(root) {
         h('thead', {}, h('tr', {}, ['Punch', 'Motion', 'Key', 'Hold (ms)'].map((t) => h('th', { scope: 'col', text: t })))), h('tbody', {}, punchRows))),
       h('div', { class: 'table-wrap' }, h('table', {}, h('caption', { text: 'Defence (from the camera)' }),
         h('thead', {}, h('tr', {}, ['Move', 'Meaning', 'Key'].map((t) => h('th', { scope: 'col', text: t })))), h('tbody', {}, defRows))),
-      h('p', { class: 'help' }, 'A key is a letter or number, or a name such as ', h('kbd', { text: 'space' }), ', ', h('kbd', { text: 'up' }), ', ', h('kbd', { text: 'enter' }), ' or a mouse button like ', h('kbd', { text: 'mouse_left' }), '. Hold is how long the key stays down.'),
+      h('p', { class: 'help' }, 'A key is a letter or number, or a name such as ', h('kbd', { text: 'space' }), ', ', h('kbd', { text: 'up' }), ', ', h('kbd', { text: 'enter' }), ' or a mouse button like ', h('kbd', { text: 'mouse_left' }), '. Hold is how long the key stays down. Leave a defence key empty so that move presses nothing (in Street Fighter, for example, you block by holding back, so BLOCK is best left empty).'),
+      h('p', { class: 'help', text: 'These keys are used everywhere: Play on this page, the desktop key editor, and punch_live from a terminal.' }),
+      layouts.length ? h('div', { class: 'actions' }, layouts.map((g) => h('button', { type: 'button', class: 'btn', text: `Use ${g.name}’s ready-made keys`, onclick: () => usePreset(g) }))) : null,
       h('div', { class: 'actions' },
         h('button', { type: 'submit', class: 'btn primary', text: 'Save controls' }),
         h('button', { type: 'button', class: 'btn', text: 'Open the desktop key editor', onclick: () => runTool({ tool: 'controls_editor' }, 'It opens in its own window.') }))),
@@ -757,19 +780,14 @@ function viewControls(root) {
     for (const action of Object.keys(inputs.defence)) defence[action] = inputs.defence[action].value.trim();
     const seen = {};
     for (const [action, spec] of Object.entries(normal)) (seen[spec.bind.toLowerCase()] = seen[spec.bind.toLowerCase()] || []).push(action);
+    // Two punches on one key is allowed (a game with fewer punch buttons), but usually a mistake: saved, with a note.
     const dupes = Object.entries(seen).filter(([, list]) => list.length > 1);
-    if (dupes.length) {
-      dupes.forEach(([, list]) => list.forEach((a) => inputs.normal[a].setAttribute('aria-invalid', 'true')));
-      const text = dupes.map(([k, list]) => `${k.toUpperCase()} is used for ${list.join(' and ')}`).join('; ');
-      result.replaceChildren(notice('bad', `Each punch needs its own key. ${text}.`));
-      announce(`Not saved. ${text}.`);
-      (body.querySelector('[aria-invalid="true"]') || body).focus();
-      return;
-    }
+    const shared = dupes.map(([k, list]) => `${k.toUpperCase()} is used for ${list.join(' and ')}`).join('; ');
     try {
       data = await api('/api/controls', { normal, defence });
-      result.replaceChildren(notice('ok', 'Controls saved.'));
-      announce('Controls saved.');
+      const text = shared ? `Controls saved. Note: ${shared}, so the game can't tell those punches apart.` : 'Controls saved.';
+      result.replaceChildren(notice(shared ? 'warn' : 'ok', text));
+      announce(text);
       draw();
     } catch (e) {
       result.replaceChildren(notice('bad', e.message));

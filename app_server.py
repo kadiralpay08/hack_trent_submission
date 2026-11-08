@@ -154,13 +154,11 @@ def tool_live(p):
         if not 0.05 <= value <= 0.99:
             raise BadRequest("Confidence must be between 0.05 and 0.99.")
         cmd += ["--confidence", str(value)]
-    preset = p.get("preset")
-    if preset:
-        if not isinstance(preset, str) or not PRESET.fullmatch(preset) or not os.path.isfile(os.path.join(PRESETS_DIR, preset + ".json")):
-            raise BadRequest("That game's key layout was not found.")
-        cmd += ["--mapping", os.path.join(PRESETS_DIR, preset + ".json")]
+    # One set of keys for everything: play always uses mappings/controls.json, the file the Controls page, the desktop
+    # key editor and punch_live.py from a terminal use too. A game's ready-made layout is copied into it with
+    # /api/controls/preset, so what the page shows is always what gets pressed.
     if live:
-        cmd.append("--live")
+        cmd += ["--live", "--keys-on"]  # the page already asked "Press keys for real?", so don't also wait for F8
     else:
         title += " (practice: no keys pressed)"
     if p.get("popup"):
@@ -393,16 +391,49 @@ def sessions(deleted=False):
 # ----------------------------------------------------------------------------------------------------
 def read_controls():
     with open(CONTROLS_PATH, encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    defence = data.setdefault("defence", {})
+    for action in gi.DEFENCE:  # every defence move is listed, so one with no key can be given one again
+        defence.setdefault(action, "")
+    return data
 
 
-def clean_bind(value):
+def clean_bind(value, allow_none=False):
     if not isinstance(value, str):
         raise BadRequest("A key must be text, such as j or space.")
+    if allow_none and not value.strip():
+        return ""  # no key: the move presses nothing (such as BLOCK in Street Fighter, which blocks by holding back)
     try:
         return gi.check_key(value.strip())
     except ValueError as e:
         raise BadRequest(str(e))
+
+
+def write_controls(data):
+    tmp = CONTROLS_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, CONTROLS_PATH)  # so punch_live never reads a half-written file
+
+
+def apply_preset(body):
+    """Copy a game's ready-made key layout (mappings/presets/<name>.json) into the one controls file."""
+    name = body.get("preset")
+    path = os.path.join(PRESETS_DIR, f"{name}.json") if isinstance(name, str) and PRESET.fullmatch(name) else None
+    if not path or not os.path.isfile(path):
+        raise BadRequest("That game's key layout was not found.")
+    with open(path, encoding="utf-8") as f:
+        preset = json.load(f)
+    data = read_controls()
+    for action, spec in preset.get("normal", {}).items():
+        if action in data["normal"]:
+            spec = spec if isinstance(spec, dict) else {"bind": spec}
+            data["normal"][action]["bind"] = clean_bind(spec.get("bind", ""))
+            data["normal"][action]["hold_ms"] = spec.get("hold_ms", data["normal"][action].get("hold_ms", 50))
+    data["defence"] = {a: clean_bind(preset.get("defence", {}).get(a, ""), allow_none=True) for a in gi.DEFENCE}
+    write_controls(data)
+    return data
 
 
 def save_controls(body):
@@ -421,20 +452,16 @@ def save_controls(body):
             raise BadRequest(f"{action}: hold time must be a whole number of milliseconds from 10 to 1000.")
         data["normal"][action]["hold_ms"] = hold
     for action, key in defence.items():
-        if action not in data.get("defence", {}):
+        if action not in data["defence"]:
             raise BadRequest(f"Unknown defence action {action!r}.")
-        data["defence"][action] = clean_bind(key)
+        data["defence"][action] = clean_bind(key, allow_none=True)
+    write_controls(data)
+    # Two punches on one key is allowed (Punch-Out!! has only two punch buttons), but usually a mistake, so say so.
     punches = [v["bind"] for v in data["normal"].values()]
     repeated = sorted({k for k in punches if punches.count(k) > 1})
-    if repeated:
-        raise BadRequest(f"Each punch needs its own key, but {', '.join(repeated)} is used twice. "
-                         "Six different keys let you map each punch in the game.")
-    tmp = CONTROLS_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
-    os.replace(tmp, CONTROLS_PATH)  # so punch_live never reads a half-written file
-    return data
+    warning = (f"{', '.join(k.upper() for k in repeated)} is used by more than one punch, so the game can't tell "
+               "those punches apart. That's fine for a game with fewer punch buttons.") if repeated else ""
+    return dict(data, warning=warning)
 
 
 # ----------------------------------------------------------------------------------------------------
@@ -653,6 +680,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ok": True, "stopped": JOBS.stop()})
             if path == "/api/controls":
                 return self._json(save_controls(body))
+            if path == "/api/controls/preset":
+                return self._json(apply_preset(body))
             return self._refuse(404, "No such page.")
         except BadRequest as e:
             return self._refuse(400, str(e))
