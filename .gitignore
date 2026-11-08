@@ -12,3 +12,6 @@ firmware/*/config.h
 !models/punch_rf_right.joblib
 certs/
 mappings/launchers.json
+
+# Our own answers to likely judge questions: kept on this computer, not in the repo
+docs/QA.md
