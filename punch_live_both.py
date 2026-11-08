@@ -4,6 +4,7 @@ running side by side, with one camera for both.
   python punch_live_both.py                    dry run: prints the keys it would press, presses nothing
   python punch_live_both.py --live --windowed  really presses keys, with the game visible beside it
   python punch_live_both.py --simulate         fake gloves on both arms (no hardware)
+  python punch_live_both.py --live --popup     small always-on-top corner window, so the game stays in front
 
 Left arm (port 5005, models/punch_rf.joblib):        JAB = J, HOOK = K, UPPERCUT = L
 Right arm (port 5006, models/punch_rf_right.joblib): CROSS = U, HOOK = I, UPPERCUT = O  (six different keys)
@@ -22,12 +23,55 @@ tracking set of keys. --no-tracking turns it off.
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 import time
 
+import popup_window
 import punch_live
 import punch_session as ps
+
+RED = (0, 0, 255)
+
+
+SHOW_S = 1.5  # how long a prediction stays on the popup
+
+
+def big_text(shown):
+    """What the popup writes large for a LivePlay message: the punch name, "?" when unsure, "" for not a punch."""
+    if shown.startswith("unsure"):
+        return "?"
+    if shown.startswith("not a punch"):
+        return ""
+    match = re.match(r"([A-Z][A-Z ]*?) \d+%", shown)
+    return match.group(1) if match else shown
+
+
+def draw_popup(frame, arms, game):
+    """The corner popup's picture, made to be read at a glance from a small window: each arm gets half of it, with
+    its newest punch in big letters (or NO DATA), and the border says it all: red = an arm has no glove data,
+    green = keys on, white = keys off (F8)."""
+    import cv2
+    import overlay
+    h, w = frame.shape[:2]
+    frame[:] = (frame * 0.75).astype(frame.dtype)  # dim the camera a little so the outlined words stand out
+    lost = [a.name for a, sensors, _ in arms if not sensors.glove_ok()]
+    border = RED if lost else (punch_live.GREEN if game.enabled else punch_live.WHITE)
+    cv2.rectangle(frame, (0, 0), (w - 1, h - 1), border, 16)
+    if not game.enabled:
+        overlay.outlined_text(frame, "keys OFF - F8", w - 30, 60, 1.3, punch_live.WHITE, 3, w / 2, "right")
+    half = (h - 40) / max(1, len(arms))
+    for i, (arm, sensors, play) in enumerate(arms):
+        top = 10 + i * half
+        overlay.outlined_text(frame, arm.name.upper(), 30, top + 50, 1.3, punch_live.YELLOW, 3)
+        if not sensors.glove_ok():
+            text, colour = "NO DATA", RED
+        elif time.time() - play.shown_t < SHOW_S and big_text(play.shown):
+            text, colour = big_text(play.shown), play.shown_colour
+        else:
+            continue
+        overlay.outlined_text(frame, text, w / 2, top + half - 30, 4.0, colour, 8, w - 60, "centre")
 
 
 def main():
@@ -39,6 +83,10 @@ def main():
     parser.add_argument("--right-phone", metavar="ADDRESS", help="use a phone running phyphox (remote access on) as the "
                         "right arm's sensor instead of a glove on port 5006: the address it shows")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
+    parser.add_argument("--popup", action="store_true", help="show a small always-on-top window in a screen corner "
+                        "with each arm's punches, that never takes focus from the game (Windows)")
+    parser.add_argument("--popup-corner", choices=popup_window.CORNERS, default="bottom-right")
+    parser.add_argument("--popup-size", type=int, default=360, help="popup width in pixels")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--confidence", type=float, help="how sure a model must be to press a key, 0 to 1")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
@@ -87,7 +135,9 @@ def main():
     callbacks.pop("on_punch")
     hotkey_frame = callbacks["on_frame"]
     sensitivity_keys = controller.Hotkeys()
-    screen_keys = ps.ToolKeys(fullscreen=not args.windowed)
+    popup = popup_window.Popup(args.popup_size, args.popup_corner) if args.popup else None
+    fullscreen = not args.windowed and not popup  # a corner popup is never full screen
+    screen_keys = ps.ToolKeys(fullscreen=fullscreen)
     started = time.time()
 
     def on_frame():
@@ -105,17 +155,22 @@ def main():
             if sensitivity_keys.pressed(vk):
                 for _, _, play in arms:
                     play.adjust_confidence(step)
-        screen_keys.poll_fullscreen()
+        if not popup:
+            screen_keys.poll_fullscreen()
         return hotkey_frame() or bool(args.max_seconds and time.time() - started > args.max_seconds)
 
     def on_draw(frame):
+        if popup:
+            draw_popup(frame, arms, game)
+            popup.update(frame)
+            return
         for _, _, play in arms:
             play.on_draw(frame)
         if tracking:
             tracking.draw(frame, ps.put)
 
     callbacks.update(ps.shared_pose_callbacks(*[s for _, s, _ in arms]))  # one camera feeds both arms
-    callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=not args.windowed,
+    callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=fullscreen,
                      state_keys=game.key_for_state)
 
     print(f"Keys: {mapping.taps}")

@@ -34,6 +34,7 @@ CONNECTIONS = [
 
 # Tunables. Distances are in shoulder-widths so they work at any range.
 GUARD_DIST = 1.0        # wrist this close to the nose => hand is up
+GUARD_DROP = 0.15       # GUARD DOWN needs both wrists this far below their elbows (shoulder widths): arms hanging
 DUCK_DROP = 0.45        # nose below baseline by this much => duck
 SLIP_SHIFT = 0.5        # nose sideways from baseline by this much => slip
 PUNCH_SPEED = 4.0       # wrist speed (shoulder-widths/s) that starts a punch
@@ -111,9 +112,15 @@ def body_state(img, world, sw_world, baseline):
     up = [np.linalg.norm(world[i] - world[NOSE]) / sw_world < GUARD_DIST for i in (L_WR, R_WR)]
     if all(up):
         states.append("BLOCK")
-    elif not any(up):
+    elif not any(up) and hands_dropped(world, sw_world):
         states.append("GUARD DOWN")
     return states
+
+
+def hands_dropped(world, sw_world):
+    """Both arms really down: each wrist below its elbow (world y points down). Hands that only leave the face,
+    as when loading up or throwing a punch, keep the wrist at or above the elbow, so they don't count."""
+    return all((world[wr][1] - world[el][1]) / sw_world > GUARD_DROP for wr, el in ((L_WR, L_EL), (R_WR, R_EL)))
 
 
 def draw(frame, img, vis, flash, now):

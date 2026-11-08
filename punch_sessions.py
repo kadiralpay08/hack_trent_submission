@@ -6,6 +6,7 @@
   python punch_sessions.py --person sam             delete everything recorded by one person, then retrain
   python punch_sessions.py --deleted                list deleted sessions
   python punch_sessions.py --restore 20261107_182310  bring a deleted session back, then retrain
+  python punch_sessions.py --delete 20261107_182310 --arm right   only one arm's part of a session (also --restore)
 
 Nothing is erased. A deleted session's recordings move to <arm folder>/_deleted/<session>/, which training
 ignores, and --restore moves them back. Add --yes to skip the "are you sure", and --no-train to skip retraining.
@@ -82,10 +83,22 @@ def move(sessions, chosen, to_deleted):
             os.makedirs(target, exist_ok=True)
             shutil.move(path, os.path.join(target, os.path.basename(path)))
             arms.add(arm_name)
-        if not to_deleted:  # tidy the emptied _deleted/<session> folders
+        if not to_deleted:  # tidy the emptied _deleted/<session> folders (never one still holding recordings)
             for arm in ps.ARMS.values():
-                shutil.rmtree(os.path.join(arm.data_dir, DELETED, sid), ignore_errors=True)
+                folder = os.path.join(arm.data_dir, DELETED, sid)
+                if not any(f.endswith(".npz") for _, _, files in os.walk(folder) for f in files):
+                    shutil.rmtree(folder, ignore_errors=True)
     return arms
+
+
+def only_arm(sessions, arm):
+    """The sessions limited to one arm's recordings, dropping sessions with none for that arm."""
+    out = {}
+    for sid, s in sessions.items():
+        if arm in s["arms"]:
+            out[sid] = {"person": s["person"], "arms": {arm: s["arms"][arm]},
+                        "paths": [(a, p) for a, p in s["paths"] if a == arm]}
+    return out
 
 
 def retrain(arms):
@@ -120,17 +133,22 @@ def main(argv=None):
     parser.add_argument("--deleted", action="store_true", help="list deleted sessions")
     parser.add_argument("--yes", action="store_true", help="don't ask before deleting or restoring")
     parser.add_argument("--no-train", action="store_true", help="don't retrain the arms afterwards")
+    parser.add_argument("--arm", choices=sorted(ps.ARMS), help="only this arm's recordings (default: both arms)")
     args = parser.parse_args(argv)
 
     restoring = bool(args.restore)
     deleting = bool(args.delete or args.person)
     if restoring and deleting:
         raise SystemExit("Delete or restore, not both at once.")
+    def scanned(deleted):
+        found = scan(deleted=deleted)
+        return only_arm(found, args.arm) if args.arm else found
+
     if not (restoring or deleting):
-        show(scan(deleted=args.deleted), "Deleted sessions:" if args.deleted else "Sessions used for training:")
+        show(scanned(args.deleted), "Deleted sessions:" if args.deleted else "Sessions used for training:")
         return 0
 
-    sessions = scan(deleted=restoring)
+    sessions = scanned(restoring)
     chosen = pick(sessions, args.restore if restoring else (args.delete or []), None if restoring else args.person)
     show({sid: sessions[sid] for sid in chosen}, "Will " + ("restore:" if restoring else "delete (recoverable):"))
     if not args.yes:
@@ -142,8 +160,9 @@ def main(argv=None):
             print("Nothing changed.")
             return 1
     arms = move(sessions, chosen, to_deleted=not restoring)
-    print(("Restored " if restoring else "Deleted ") + ", ".join(chosen)
-          + ("" if restoring else f". Undo with: python punch_sessions.py --restore {' '.join(chosen)}"))
+    arm_opt = f" --arm {args.arm}" if args.arm else ""
+    print(("Restored " if restoring else "Deleted ") + ", ".join(chosen) + (f" ({args.arm} arm only)" if args.arm else "")
+          + ("" if restoring else f". Undo with: python punch_sessions.py --restore {' '.join(chosen)}{arm_opt}"))
     if not args.no_train:
         retrain(arms)
     return 0

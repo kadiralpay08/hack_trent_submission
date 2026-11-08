@@ -115,6 +115,34 @@ class TrackingSet(unittest.TestCase):
             self.assertEqual(g.key_for_state("GUARD DOWN"), "g")
             g.set_states(set())                         # guard back up: the key lets go
             self.assertEqual(g.keyboard.down, set())
+    def test_guard_down_needs_the_arms_really_dropped(self):
+        """GUARD DOWN (jump in Street Fighter) only when both arms hang down, not when the hands just leave the face
+        to load up or throw a punch."""
+        import pose_tracker as pt
+
+        def pose(left_wrist, right_wrist):
+            world = np.zeros((33, 3))                              # y points down, shoulder width 0.4 m
+            world[pt.NOSE] = [0.0, -0.75, 0.0]
+            world[pt.L_SH], world[pt.R_SH] = [0.2, -0.5, 0.0], [-0.2, -0.5, 0.0]
+            world[pt.L_EL], world[pt.R_EL] = [0.25, -0.25, 0.0], [-0.25, -0.25, 0.0]
+            world[pt.L_WR], world[pt.R_WR] = left_wrist, right_wrist
+            return pt.body_state(None, world, 0.4, None)
+
+        guard = ([0.08, -0.6, -0.2], [-0.08, -0.6, -0.2])           # fists by the chin
+        loading = ([0.35, -0.3, -0.3], [-0.35, -0.3, -0.3])         # both hands off the face, wrists level with elbows
+        dropped = ([0.27, 0.05, 0.0], [-0.27, 0.05, 0.0])           # arms hanging: wrists well below the elbows
+        one_down = ([0.27, 0.05, 0.0], [-0.35, -0.3, -0.3])
+        self.assertEqual(pose(*guard), ["BLOCK"])
+        self.assertEqual(pose(*loading), [])
+        self.assertEqual(pose(*one_down), [])
+        self.assertEqual(pose(*dropped), ["GUARD DOWN"])
+
+    def test_street_fighter_controls(self):
+        m = gi.Mapping.load(os.path.join(ROOT, "mappings", "street_fighter.json"))
+        self.assertEqual(m.holds.get("GUARD DOWN"), "w")             # jump
+        self.assertNotIn("BLOCK", m.holds)                             # guard up must not jump too
+        self.assertEqual(controls_editor.problems(m), [])
+
     def test_block_while_tracking_option(self):
         data = gi.Mapping.load(os.path.join(ROOT, "mappings", "controls.json")).to_dict()
         data["aim"]["block_while_tracking"] = True
