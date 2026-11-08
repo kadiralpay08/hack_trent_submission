@@ -34,6 +34,7 @@ import argparse
 import os
 import time
 
+import hud
 import popup_window
 import punch_segment
 import punch_session as ps
@@ -54,6 +55,7 @@ class LivePlay:
         self.name, self.x, self.scale, self.footer = name, x, scale, footer  # where this arm draws its text
         self.waiting = []        # finished punches waiting for their last camera frame
         self.shown, self.shown_t = "", 0.0
+        self.shown_parts = ("", "", "")   # what the overlay shows for it: a title, a line of detail, a number
         self.count = 0
 
     def poll(self):
@@ -85,11 +87,12 @@ class LivePlay:
         delay = 1000 * (time.time() - seen_at)
         timing = f"{1000 * seg.duration:.0f} ms punch ({'stopped' if seg.reason == 'decel' else 'timeout'}), +{delay:.0f} ms to decide"
         if label == "NONE":
-            self.show(f"not a punch ({100 * conf:.0f}%): no key", WHITE)
+            self.show(f"not a punch ({100 * conf:.0f}%): no key", WHITE, "Not a punch", "no key pressed", f"{100 * conf:.0f}%")
             self.log(f"{self.name}movement {self.count}: not a punch {100 * conf:.0f}% | {timing}")
             return
         if label is None or conf < self.clf.min_confidence:
-            self.show(f"unsure ({label} {100 * conf:.0f}%): no key", ORANGE)
+            self.show(f"unsure ({label} {100 * conf:.0f}%): no key", ORANGE, "Unsure", f"best guess {label}: no key pressed",
+                      f"{100 * conf:.0f}%")
             self.log(f"{self.name}punch {self.count}: unsure, best guess {label} {100 * conf:.0f}% | {timing}")
             return
         if not self.game.enabled:
@@ -98,46 +101,69 @@ class LivePlay:
             note = f"{'tracking ' if self.game.tracking else ''}{self.game.key_for(self.action(label))}"
         else:
             note = "no key mapped, or key already down"
-        self.show(f"{label} {100 * conf:.0f}%  ({note})", GREEN)
+        self.show(f"{label} {100 * conf:.0f}%  ({note})", GREEN, label, note, f"{100 * conf:.0f}%")
         self.log(f"{self.name}punch {self.count}: {label} {100 * conf:.0f}% -> {note} | {timing}")
 
-    def show(self, text, colour):
+    def show(self, text, colour, title="", detail="", number=""):
         self.shown, self.shown_colour, self.shown_t = text, colour, time.time()
+        self.shown_parts = (title or text, detail, number)
 
     def on_draw(self, frame):
-        top, x, s = 150, self.x, self.scale
-        if self.name:
-            ps.put(frame, self.name.strip(" :"), top - 30, YELLOW, 0.6 * s + 0.1, x=x)
+        """One card for this arm: what the glove is doing now, or the last punch it recognised. With two arms each gets
+        half the width (self.scale is below 1 then). The first arm also draws the key output and sensitivity."""
+        W, now = hud.width_of(frame), time.time()
+        if self.scale < 1:
+            width, x = W / 2 - 22, (hud.MARGIN if self.x <= 10 else W / 2 + 8)
+        else:
+            width, x = W - 2 * hud.MARGIN, hud.MARGIN
+        who = self.name.strip(" :")
+        kicker = f"{who} arm" if who else "Recognition"
+        where = dict(x=x, width=width)
         if not self.sensors.glove_ok():
-            ps.put(frame, "NO GLOVE DATA", top, (0, 0, 255), 0.8 * s, x=x)
+            hud.main_card(frame, kicker, "No glove data", "is it on, and on the same WiFi?", accent=hud.BAD,
+                          title_colour=hud.BAD, **where)
         elif not self.sensors.segmenter.ready:
-            ps.put(frame, "hold the glove still...", top, ORANGE, 0.7 * s, x=x)
-        if time.time() - self.shown_t < 1.5:
-            ps.put(frame, self.shown, top + 40, self.shown_colour, 1.0 * s, thick=3 if s >= 1 else 2, x=x)
+            hud.main_card(frame, kicker, "Hold the glove still", "getting ready", accent=hud.WARN, title_colour=hud.WARN, **where)
+        elif now - self.shown_t < 1.5:
+            title, detail, number = self.shown_parts
+            colour = hud.tone(self.shown_colour)
+            hud.main_card(frame, kicker, title, detail, accent=colour, title_colour=colour, right=number or None, **where)
+        else:
+            hud.main_card(frame, kicker, "Ready", "throw a punch", accent=hud.INFO, title_colour=hud.MUTED, **where)
         if not self.footer:
             return
-        ps.put(frame, f"key output {'ON' if self.game.enabled else 'OFF (F8)'}  |  F7 calibrate  F9 quit  F11 full screen",
-               frame.shape[0] - ps.TEXT_BOTTOM, YELLOW if self.game.enabled else WHITE, 0.5)
-        ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  ([ looser, ] stricter)"
-               f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - ps.TEXT_BOTTOM - 25, WHITE, 0.5)
+        on = self.game.enabled
+        hud.pill(frame, "KEYS ON" if on else "KEYS OFF   (F8 to turn on)", W - hud.MARGIN, hud.TOP_ROW,
+                 hud.GOOD if on else hud.MUTED, size=0.5, bold=True, align="right")
+        hud.pill(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%   [ looser   ] stricter   |   start "
+                 f"{self.sensors.settings.start_g:g} g", W - hud.MARGIN, hud.BOTTOM - 60, hud.TEXT, size=0.45, bold=False,
+                 align="right", max_width=W / 2 - 24)
+        hud.hint(frame, "F7 calibrate   |   F9 quit   |   F11 full screen")
 
     def on_draw_popup(self, frame):
         """A sparse picture for the corner popup. The border colour says it at a glance: green = keys on,
         grey = keys off, red = no glove data."""
         import cv2
         h, w = frame.shape[:2]
+        k, W = h / 480, hud.width_of(frame)
         if not self.sensors.glove_ok():
-            colour = (0, 0, 255)
-            ps.put(frame, "NO GLOVE DATA", 110, colour, 1.0, thick=3)
+            colour, status = hud.BAD, "NO GLOVE DATA"
+        elif self.game.enabled:
+            colour, status = hud.GOOD, "KEYS ON"
         else:
-            colour = GREEN if self.game.enabled else WHITE
-        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), colour, 10)
+            colour, status = hud.MUTED, "KEYS OFF"
+        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), colour, max(6, round(10 * k)))
+        hud.pill(frame, status, W / 2, 40, colour, size=1.0, bold=True, align="centre")
         if time.time() - self.shown_t < 1.5:
-            ps.put(frame, self.shown, 150, self.shown_colour, 0.9, thick=3)
+            title, _, number = self.shown_parts
+            tone = hud.tone(self.shown_colour)
+            hud.pill(frame, f"{title}  {number}".strip(), W / 2, 150, tone, size=1.3, bold=True, align="centre",
+                     max_width=W - 60)
 
     def adjust_confidence(self, step):
         self.clf.min_confidence = round(min(0.95, max(0.35, self.clf.min_confidence + step)), 2)
-        self.show(f"confidence cutoff {100 * self.clf.min_confidence:.0f}%", YELLOW)
+        self.show(f"confidence cutoff {100 * self.clf.min_confidence:.0f}%", YELLOW, "Sensitivity",
+                  f"confidence cutoff {100 * self.clf.min_confidence:.0f}%")
         self.log(f"confidence cutoff now {100 * self.clf.min_confidence:.0f}%")
 
 
