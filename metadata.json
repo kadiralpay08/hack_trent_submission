@@ -559,14 +559,14 @@
     "api_call_count": 96
   },
   "redaction": {
-    "replacements": 116,
+    "replacements": 123,
     "layers": {
       "betterleaks": 27,
       "connection_string": 0,
       "credential_key": 0,
       "credential_value": 0,
       "credentialed_uri": 0,
-      "entropy": 44,
+      "entropy": 51,
       "key_context": 45,
       "provider_token": 0,
       "shell_stdin": 0
