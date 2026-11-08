@@ -399,20 +399,23 @@ class ToolKeys:
 def draw_trace(frame, times, values, now, seconds, top_g, marks, origin, size, threshold_g=None):
     """A strip chart of acceleration beyond gravity. marks = [(t, colour)] vertical lines."""
     import cv2
+    import hud
     x0, y0 = origin
     w, h = size
-    cv2.rectangle(frame, (x0, y0), (x0 + w, y0 + h), (30, 30, 30), -1)
+    k = frame.shape[0] / 480
+    hud.card(frame, x0 / k, y0 / k, w / k, h / k, radius=8)
     to_x = lambda t: int(x0 + w * (1 - (now - t) / seconds))
     to_y = lambda g: int(y0 + h - h * min(g, top_g) / top_g)
     if threshold_g is not None:
-        cv2.line(frame, (x0, to_y(threshold_g)), (x0 + w, to_y(threshold_g)), (90, 90, 90), 1)
+        cv2.line(frame, (x0, to_y(threshold_g)), (x0 + w, to_y(threshold_g)), hud.MUTED, 1, cv2.LINE_AA)
+        hud.text(frame, f"start {threshold_g:g} g", x0 / k + 8, to_y(threshold_g) / k - 5, 0.4, hud.MUTED)
     keep = times >= now - seconds
     if keep.sum() > 1:
         pts = np.stack([[to_x(t) for t in times[keep]], [to_y(v) for v in values[keep]]], axis=1)
-        cv2.polylines(frame, [pts.astype(np.int32)], False, (255, 255, 255), 1)
+        cv2.polylines(frame, [pts.astype(np.int32)], False, hud.TEXT, max(1, round(2 * k)), cv2.LINE_AA)
     for t, colour in marks:
         if t >= now - seconds:
-            cv2.line(frame, (to_x(t), y0), (to_x(t), y0 + h), colour, 2)
+            cv2.line(frame, (to_x(t), y0), (to_x(t), y0 + h), hud.tone(colour), max(2, round(2 * k)), cv2.LINE_AA)
 
 
 def put(frame, text, row, colour=(255, 255, 255), scale=0.6, x=10, thick=2):
