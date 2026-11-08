@@ -1,0 +1,62 @@
+{
+  "cli_version": "0.13.1",
+  "checkpoint_id": "01M6W7QSW6KWX2GGBCAJ3KY2X2",
+  "strategy": "manual-commit",
+  "branch": "andre/two-arm-capture",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "models/punch_rf.joblib",
+    "models/punch_rf_right.joblib",
+    "punch_data/HOOK/HOOK_20261107_190351_018.npz",
+    "punch_data/HOOK/HOOK_20261107_190415_780.npz",
+    "punch_data/HOOK/HOOK_20261107_190419_667.npz",
+    "punch_data/JAB/JAB_20261107_190359_161.npz",
+    "punch_data/JAB/JAB_20261107_190407_313.npz",
+    "punch_data/JAB/JAB_20261107_190411_627.npz",
+    "punch_data/JAB/JAB_20261107_190423_744.npz",
+    "punch_data/UPPERCUT/UPPERCUT_20261107_190355_127.npz",
+    "punch_data/UPPERCUT/UPPERCUT_20261107_190403_170.npz",
+    "punch_data/UPPERCUT/UPPERCUT_20261107_190427_754.npz",
+    "punch_data_right/CROSS/CROSS_20261107_190354_986.npz",
+    "punch_data_right/CROSS/CROSS_20261107_190407_186.npz",
+    "punch_data_right/CROSS/CROSS_20261107_190411_490.npz",
+    "punch_data_right/CROSS/CROSS_20261107_190423_611.npz",
+    "punch_data_right/HOOK/HOOK_20261107_190359_206.npz",
+    "punch_data_right/HOOK/HOOK_20261107_190403_220.npz",
+    "punch_data_right/HOOK/HOOK_20261107_190415_639.npz",
+    "punch_data_right/HOOK/HOOK_20261107_190419_528.npz",
+    "punch_data_right/UPPERCUT/UPPERCUT_20261107_190351_079.npz",
+    "punch_data_right/UPPERCUT/UPPERCUT_20261107_190427_814.npz",
+    "punch_data_right/UPPERCUT/UPPERCUT_20261107_190431_895.npz"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 10,
+    "cache_creation_tokens": 3735,
+    "cache_read_tokens": 1555695,
+    "output_tokens": 2508,
+    "api_call_count": 5
+  },
+  "redaction": {
+    "replacements": 35,
+    "layers": {
+      "betterleaks": 0,
+      "connection_string": 0,
+      "credential_key": 0,
+      "credential_value": 0,
+      "credentialed_uri": 0,
+      "entropy": 16,
+      "key_context": 19,
+      "provider_token": 0,
+      "shell_stdin": 0
+    }
+  }
+}
