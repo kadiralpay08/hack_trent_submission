@@ -7,7 +7,7 @@ Click a bind, then press a key or click a mouse button to bind it. Esc cancels; 
 Three sets:
   Normal    punches while the glove button is up
   Tracking  punches while the glove button is held (the right hand steers the mouse)
-  Defence   camera body states (block, duck, slip), held while they last
+  Defence   camera body states (block, duck, slip, guard down), held while they last
 Hold is how long a punch keeps its key or mouse button down; some games miss very short presses.
 Steering: speed (like a thumbstick) or position (like a trackpad), and how fast.
 
@@ -41,7 +41,8 @@ NICE = {"mouse_left": "Left click", "mouse_right": "Right click", "mouse_middle"
         "bracketleft": "[", "bracketright": "]", "comma": ",", "period": ".", "semicolon": ";", "minus": "-",
         "equals": "=", "quote": "'", "grave": "`", "backslash": "\\", "slash": "/"}
 LABELS = {"JAB": "Jab", "HOOK": "Hook", "UPPERCUT": "Uppercut", "CROSS": "Cross (right glove)",
-          "BLOCK": "Block", "DUCK": "Duck", "SLIP LEFT": "Slip left", "SLIP RIGHT": "Slip right"}
+          "BLOCK": "Block", "DUCK": "Duck", "SLIP LEFT": "Slip left", "SLIP RIGHT": "Slip right",
+          "GUARD DOWN": "Guard down"}
 
 
 def key_from_tk(keysym):
@@ -315,7 +316,7 @@ DEFAULTS = {
                "UPPERCUT": {"bind": "u", "hold_ms": 50}, "CROSS": {"bind": "k", "hold_ms": 50}},
     "tracking": {"JAB": {"bind": "mouse_left", "hold_ms": 150}, "HOOK": {"bind": "mouse_right", "hold_ms": 150},
                  "UPPERCUT": {"bind": "mouse_middle", "hold_ms": 150}},
-    "defence": {"BLOCK": "w", "DUCK": "s", "SLIP LEFT": "a", "SLIP RIGHT": "d"},
+    "defence": {"BLOCK": "w", "DUCK": "s", "SLIP LEFT": "a", "SLIP RIGHT": "d", "GUARD DOWN": "g"},
     "aim": dict(gi.AIM_DEFAULTS),
 }
 

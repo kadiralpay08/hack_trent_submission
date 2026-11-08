@@ -15,7 +15,8 @@
     "BLOCK": "w",
     "DUCK": "s",
     "SLIP LEFT": "a",
-    "SLIP RIGHT": "d"
+    "SLIP RIGHT": "d",
+    "GUARD DOWN": "g"
   },
   "aim": {
     "mode": "speed",
