@@ -42,6 +42,8 @@ Defence keys: block `W`, duck `S`, slip left `A`, slip right `D`. These are in `
 
 Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.py`. By default the screen calls each punch with a beep, in random order. The strongest punch in the next 1.6 s gets that label. Movement caught between prompts, plus a "MOVE, DON'T PUNCH" round every 15 prompts, is saved as **NONE** (not a punch), so the model learns to press nothing for guard adjustments and feints. The original button mode is still available as `--button`: hold, punch, release.
 
+**Both arms in one session (2026-11-07):** `punch_capture.py --both` (with `--right-phone ADDRESS` for a phone) calls combos, one punch per arm, such as "LEFT HOOK, then RIGHT UPPERCUT". Half the combos start with each arm, shuffled. Each punch is saved to its own arm's folder from its own sensor, so the arms still train separately. NONE is collected for both arms, with extra MOVE rounds at the end if an arm is short. Every capture session now retrains each arm it recorded when it ends (the old model kept as `.bak`; `--no-train` skips it), so one session goes from nothing to trained models.
+
 ## Decisions
 
 | Decision | Why |
@@ -60,6 +62,11 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | Low-confidence predictions press no key | The model only knows three classes, so other movement must not be forced into one of them |
 | A second arm is optional and fully separate (2026-11-07) | The right glove uses port 5006, its own data folder, model and punches (CROSS, HOOK, UPPERCUT), selected with `--arm right`. The left arm keeps its original data and model, and stays the default. Camera features are mirrored for the right arm |
 | The glove sends to one laptop's address, not broadcast (2026-11-07) | Broadcast over the phone hotspot lost about a third of the samples, in gaps of up to about 350 ms, enough to swallow a whole punch. Sending to one address gets WiFi's automatic re-sends. To use another computer, flash its address |
+| Tracking mode on the glove button (2026-11-07) | Holding the button turns the right hand into a mouse joystick (camera, right wrist relative to the right shoulder, from where it was at the press), and switches punches to a tracking set of binds (default: mouse clicks, held 150 ms). The camera's BLOCK is off while tracking, because the steering hand sits near the face; duck and slip stay on. Speed and position steering are both available. Binds live in `mappings/controls.json` (normal, tracking and defence sets) and are edited with `controls_editor.py`; `browser_boxing.json` keeps the older format, which still loads |
+| Recordings save the live gravity estimate (2026-11-07) | NONE examples happen while moving, so the saved slice never shows the glove still, and a fresh punch finder (which waits for stillness) found nothing: every NONE was rejected. Capture now saves `start_gravity`, and capture and training start the punch finder from it |
+| Two-arm training records combos, balanced on which arm goes first (2026-11-07) | In play the arms punch in sequence, and each arm's sensor feels the body turn from the other's punch. Recording combos teaches each model that movement, and catches it as NONE between prompts. Balancing which arm leads stops a model learning "my punch always comes first". Each arm is still labelled from its own sensor and trained on its own |
+| Capture trains when it ends (2026-11-07) | One session takes you from nothing to working models. The previous model is kept as `.bak`, so a bad session can be undone by copying it back |
+| Camera text is drawn at the window's real size (2026-11-07) | Text drawn on the small camera picture and then stretched to full screen was blurry. `overlay.py` holds it back and draws it after the picture is enlarged. Text is white or coloured with a black outline, never grey, which was hard to read |
 | Separate live script, `controller.py` left unchanged | Keeps Kadir's rule-based controller as a demo fallback |
 | A phone can be the right arm's sensor instead of a glove (2026-11-07) | The phyphox app serves the phone's accelerometer and gyroscope and the laptop polls it (`phyphox_imu.py`). It is chosen with `--phone ADDRESS` together with `--arm right` in `punch_capture.py`, `punch_tune.py` and `punch_live.py`, or `--right-phone` in `punch_live_both.py`, and is refused for the left arm so the left glove's recordings and model can't be mixed with it. Polling means nothing has to connect into the laptop: in testing, a phone's connection into the laptop never arrived (from a teammate's hotspot or an iPhone's own), while the laptop reaching the phone worked. The right arm's recordings, model and punches stay as for the right glove. A phone has no magnetometer and reports about 80 to 100 Hz against a glove's 500 Hz. Capture's "enough data" check used to assume 500 Hz and rejected every phone recording as dropped packets (shown as MISSED); it now scales with the sensor's measured rate (`LiveSensors.sample_rate_hz`). A browser-page alternative (`phone_imu.py`) is kept but did not work in that test |
 
@@ -76,9 +83,12 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | `punch_capture.py` | Records labelled training blocks using the glove button |
 | `punch_train.py` | Trains and evaluates the random forest |
 | `punch_live.py` | Classifies punches live and presses keys |
+| `punch_sessions.py` | Lists recording sessions by person and arm; deletes (recoverably) or restores whole sessions, then retrains |
 | `punch_config.json` | Shared punch-finding settings |
 | `punch_sim.py` | Fake glove data that follows the punch definitions. Used by `--simulate` and the tests. It shows the code runs, not that the model works on real punches |
-| `punch_live_both.py` | Runs the left and right models side by side, with one camera |
+| `hand_aim.py` | Tracking mode: right-hand steering of the mouse while the glove button is held |
+| `controls_editor.py` | Keybind window for `mappings/controls.json` |
+| `punch_live_both.py` | The final program: runs the left and right models side by side with one camera, opens the keybind window, and has tracking mode on the left glove's button |
 | `tests/test_punch_pipeline.py` | Run with `python -m unittest discover tests` |
 
 **Status (2026-11-07):** all of the above is built and tested on simulated data. The firmware compiles but hasn't been flashed. Nothing has been tested on real punches yet.
@@ -86,6 +96,8 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 **Right arm from a phone:** `phyphox_imu.py` polls the phyphox app and plugs into `LiveSensors` through `--phone` (with `--arm right`). The receiver has run on a real phone (about 80 to 100 Hz). 60 right-arm punches (20 each of CROSS, HOOK and UPPERCUT) were recorded with it, and `models/punch_rf_right.joblib` was trained on them: 98% cross-validated, but from one session, so optimistic. It has no NONE (not a punch) examples yet and has not been tried live. `phone_imu.py` with `phone/index.html` is a browser-page alternative that did not work (see the decision above).
 
 **Shared parts:** `glove_receiver.py`, `pose_tracker.py`, `game_input.py`, `firmware/glove_imu/` (the left glove, ESP32-CAM). `firmware/glove_imu_s3/` is an ESP32-S3 glove for either arm, and `firmware/mpu6050_usb_check/` and `firmware/mpu9250_usb_check/` check whether a sensor is alive over USB.
+
+**Kadir's game and launcher:** `website/` is a webcam sparring game with arcade sound (`website/js/audio.js`: a punch sound per move, a beat, READY and FIGHT!), and `keybridge.py` serves it and turns its punches into real key presses through `game_input.py`. `play.py` and `variants/` select product versions; the 45 degree camera is shelved in `archive/angled_camera/`.
 
 **Earlier work, kept and not the main path:** `controller.py`, `glove_punch.py`, `punch_detector.py`, `tune_punches.py`, `replay_punches.py` (Kadir's camera-rules controller), `glove_check.py` (still the first thing to run if the glove seems broken), `punch_tracker.py`, `firmware/punch_stream/`, `firmware/sketch_nov6a/` (wired Uno experiments).
 

@@ -269,7 +269,7 @@ class FakeSensors:
         self.events, self.settings, self.now_t = queue.Queue(), punch_segment.SegmentSettings(), 100.0
         self.segmenter = type("S", (), {"ready": True})()
 
-    def glove_ok(self):
+    def glove_ok(self, within=0.5):
         return True
 
     def latest_imu_t(self):
@@ -333,6 +333,50 @@ class StartAndPause(unittest.TestCase):
             cap.toggle()
             self.assertFalse(cap.paused)
             self.assertEqual(cap.phase, "announce")
+
+
+class NoneWhileMoving(unittest.TestCase):
+    """NONE examples happen while the boxer is moving, so the glove is never still in the saved slice.
+    They used to be rejected as "no punch found", because a fresh segmenter waits for stillness."""
+
+    def moving_then_jolt(self):
+        from types import SimpleNamespace
+        rate, rng = 500, np.random.default_rng(3)
+        t = np.arange(int(4.0 * rate)) / rate
+        accel = np.tile([0.0, 0.0, 1.0], (len(t), 1)) + rng.normal(0, 0.01, (len(t), 3))
+        gyro = np.zeros((len(t), 3))
+        moving = t >= 1.0                       # still for 1 s, then shuffling about for good
+        accel[moving] += 0.3 * np.stack([np.sin(7 * t[moving]), np.cos(5 * t[moving]), 0 * t[moving]], 1)
+        gyro[moving, 2] = 80 + 30 * np.sin(3 * t[moving])  # turning about gravity, never slow enough to be still
+        lin, rot = punch_sim.punch_motion("JAB", rng)  # a sharp guard snap at 3 s
+        i = int(3.0 * rate)
+        accel[i:i + len(lin)] += lin
+        samples = [SimpleNamespace(t=float(t[k]), t_us=int(t[k] * 1e6), accel=accel[k], gyro=gyro[k], button=False,
+                                   mag=None, mag_ok=False) for k in range(len(t))]
+        return samples, 3.0
+
+    def test_none_example_is_saved_and_trained_on(self):
+        import punch_capture
+        import punch_train
+        config = punch_session.load_config()
+        sensors = punch_session.LiveSensors(config["segment"], port=5011)
+        try:
+            samples, jolt_t = self.moving_then_jolt()
+            for s in samples:
+                sensors._on_sample(None, s)
+            with tempfile.TemporaryDirectory() as tmp:
+                cap = punch_capture.PromptedCapture(sensors, config, 5, tmp, "test")
+                imu, _ = sensors.window(jolt_t - 1.05, jolt_t + 0.35)
+                self.assertEqual(punch_segment.find_segments(imu["t"], imu["accel"], imu["gyro"], config["segment"]),
+                                 [])                                  # the old way: nothing found
+                seg = cap.save_block("NONE", jolt_t - 0.05, jolt_t + 0.05, quiet=True)
+                self.assertIsNotNone(seg)                             # now it is saved
+                self.assertAlmostEqual(seg.start_t, jolt_t, delta=0.02)
+                X, y, *_ = punch_train.build_dataset(tmp, config, quiet=True)
+                self.assertEqual(list(y), ["NONE"])                   # and training uses it
+        finally:
+            sensors.receiver.close() if hasattr(sensors.receiver, "close") else None
+            sensors.close()
 
 
 if __name__ == "__main__":

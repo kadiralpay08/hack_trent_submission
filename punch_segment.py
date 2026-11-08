@@ -75,10 +75,16 @@ class Segment:
 class Segmenter:
     """Feed samples in time order. feed() returns ("start", segment), ("end", segment) or None."""
 
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, gravity=None):
+        """gravity: where gravity points in glove axes at the first sample, if already known (the live
+        tool saves its estimate with each recording). Without it the segmenter must first see the glove
+        still, which a recording made while moving (a NONE example) never shows."""
         self.s = settings or SegmentSettings()
         self.gravity = None      # current gravity estimate in glove axes, in g
         self.still_total = 0.0
+        if gravity is not None and np.linalg.norm(gravity) > 0.5:
+            self.gravity = np.asarray(gravity, dtype=float) / np.linalg.norm(gravity)
+            self.still_total = self.s.ready_s
         self.last_t = None
         self.rearm_until = -1e9
         self.active = None       # the Segment being measured
@@ -152,9 +158,10 @@ class Segmenter:
         return ("end", seg)
 
 
-def find_segments(t, accel, gyro, settings=None):
-    """Run the segmenter over recorded arrays. Returns the finished segments, in order."""
-    seg = Segmenter(settings)
+def find_segments(t, accel, gyro, settings=None, gravity=None):
+    """Run the segmenter over recorded arrays. Returns the finished segments, in order.
+    gravity: the live estimate at the first sample, if the recording has one (see Segmenter)."""
+    seg = Segmenter(settings, gravity)
     found = []
     for i in range(len(t)):
         event = seg.feed(float(t[i]), accel[i], gyro[i])

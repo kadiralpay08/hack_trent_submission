@@ -32,7 +32,8 @@ def build_dataset(root, config, quiet=False, side="L"):
     for path in ps.block_paths(root):
         block = ps.load_block(path)
         meta, imu = block["meta"], block["imu"]
-        segments = punch_segment.find_segments(imu["t"], imu["accel"], imu["gyro"], seg_settings)
+        segments = punch_segment.find_segments(imu["t"], imu["accel"], imu["gyro"], seg_settings,
+                                               meta.get("start_gravity"))  # recorded while moving: NONE
         seg, _ = punch_segment.pick_block_segment(segments, meta["press_t"], meta["release_t"])
         if seg is None or seg.reason == "gap":
             skipped["no punch found with the current settings"] += 1

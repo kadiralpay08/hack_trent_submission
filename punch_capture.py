@@ -4,6 +4,19 @@
   python punch_capture.py --target 20 --person andre   a smaller set, for a first test
   python punch_capture.py --button                     hold the glove button around each punch instead
   python punch_capture.py --simulate                   fake glove (no hardware), to try the tool
+  python punch_capture.py --both --right-phone 172.20.10.1 --person andre
+                                                       BOTH ARMS at once, in combos (see below)
+
+BOTH ARMS (--both): one session records everything for both arms. Each prompt is a combo, one punch per
+arm, such as "1. LEFT HOOK  2. RIGHT UPPERCUT": throw them in that order within 2.4 s of the beep. Half the
+combos start with the left arm and half with the right, in random order. Each punch is labelled from its own
+arm's sensor and saved to that arm's folder (punch_data/ or punch_data_right/), so each arm still trains on
+its own. NONE examples are collected for both arms (between prompts and in MOVE rounds); if an arm still has
+fewer NONE than --target when the punches are done, extra MOVE rounds top it up (at most 6). The right arm is
+the glove on port 5006, or a phone with --right-phone ADDRESS.
+
+When any session ends, each arm that recorded something is retrained on everything in its folder, NONE
+included, and its old model is kept as models/<name>.joblib.bak. --no-train skips that.
 
 PROMPTED MODE (default). Nothing starts until you have calibrated (press C, get into guard during the
 5 s countdown) and pressed "." (works from any window). "." also pauses and resumes at any time.
@@ -22,6 +35,7 @@ Keys that work in any window, no Enter needed:
 Type in THIS TERMINAL, then Enter:
   p       pause or resume (prompted mode), the same as "."
   x       undo the last saved punch (moves it to the arm's _rejected/ folder)
+  discard throw away this whole session and quit without training (punch_sessions.py --restore brings it back)
   j/h/u   button mode only: switch to JAB / HOOK / UPPERCUT
   q       quit (everything saved so far is kept); q in the camera window also works
 
@@ -44,7 +58,8 @@ PRE_S, POST_S = 1.0, 0.3       # data kept before and after each block
 MIN_HOLD_S, MAX_HOLD_S = 0.15, 8.0
 REST_S, GO_S, LATE_S = 1.6, 1.6, 0.6   # prompted: guard, punch window, grace after the window
 FREE_EVERY, FREE_S, ANNOUNCE_S = 15, 15.0, 4.0
-GREEN, RED, ORANGE, GREY, YELLOW = (0, 220, 0), (0, 0, 255), (0, 150, 255), (190, 190, 190), (0, 255, 255)
+LOST_S = 1.0   # a sensor silent this long mid-session pauses recording
+GREEN, RED, ORANGE, WHITE, YELLOW = (0, 220, 0), (0, 0, 255), (0, 150, 255), (255, 255, 255), (0, 255, 255)
 TONES = {"JAB": 880, "CROSS": 880, "HOOK": 660, "UPPERCUT": 520, "FREE": 300}
 
 
@@ -55,11 +70,53 @@ def beep(kind):
     threading.Thread(target=winsound.Beep, args=(TONES.get(kind, 700), 120), daemon=True).start()
 
 
+def clean_name(text):
+    """One lower-case word, so punch_sessions.py --person NAME works in a command: "Sam Lee" -> "sam_lee"."""
+    return "_".join(text.lower().split())
+
+
+class NameEntry:
+    """The boxer types their name in the camera window before recording (Backspace deletes, Enter confirms).
+    Every recording carries it, so one person's data can be deleted later: punch_sessions.py --person NAME.
+    Skipped when --person is given."""
+    ALLOWED = set("abcdefghijklmnopqrstuvwxyz0123456789 _-")
+
+    def __init__(self, given=""):
+        self.text, self.name = "", clean_name(given or "") or None
+
+    @property
+    def waiting(self):
+        return self.name is None
+
+    def key(self, k):
+        """A key from the camera window. While the name is being typed, every key goes to it."""
+        if not self.waiting:
+            return False
+        if k in (10, 13):
+            if clean_name(self.text):
+                self.name = clean_name(self.text)
+                print(f"Recording as '{self.name}'. Delete this person's data later with: "
+                      f"python punch_sessions.py --person {self.name}")
+        elif k == 8:
+            self.text = self.text[:-1]
+        elif k == 27:
+            self.text = ""
+        elif chr(k).lower() in self.ALLOWED and len(self.text) < 24:
+            self.text += chr(k)
+        return True
+
+    def draw(self, frame, top):
+        ps.put(frame, "WHO IS PUNCHING?", top, YELLOW, 1.2, thick=3)
+        ps.put(frame, f"name: {self.text}_", top + 45, WHITE, 1.0, thick=2)
+        ps.put(frame, "type it here, then press Enter (Backspace deletes)", top + 80, WHITE, 0.6)
+
+
 class Capture:
     """Shared by both modes: counting, saving and checking blocks, undo, and the terminal."""
 
     def __init__(self, sensors, config, target, root, person, arm=None):
-        self.sensors, self.config, self.target, self.root, self.person = sensors, config, target, root, person
+        self.sensors, self.config, self.target, self.root = sensors, config, target, root
+        self.names = NameEntry(person)  # typed in the camera window unless --person was given
         self.arm = arm or ps.ARMS["left"]
         self.how = self.arm.how
         self.keys = {label[0].lower(): label for label in self.arm.labels}  # j or c, h, u
@@ -67,17 +124,20 @@ class Capture:
         self.counts.setdefault(NONE, 0)
         self.saved = []              # (path, label) saved this session, for undo
         self.session = time.strftime("%Y%m%d_%H%M%S")
-        self.result, self.result_colour, self.result_t = "", GREY, 0.0
+        self.result, self.result_colour, self.result_t = "", WHITE, 0.0
         self.quit = False
         self.calibrated = False  # set by pose_tracker after C and its 5 s countdown
 
     def on_calibrated(self):
         self.calibrated = True
 
+    def on_key(self, key):
+        return self.names.key(key)
+
     def remaining(self):
         return {k: max(0, self.target - self.counts.get(k, 0)) for k in self.arm.labels}
 
-    def say(self, text, colour=GREY):
+    def say(self, text, colour=WHITE):
         print(text)
         self.result, self.result_colour, self.result_t = text, colour, time.time()
 
@@ -91,6 +151,9 @@ class Capture:
     def command(self, word):
         if word == "x":
             self.undo()
+        elif word == "discard":
+            self.discard()
+            self.quit = True
         elif word in ("q", "quit"):
             self.quit = True
         elif word:
@@ -107,25 +170,43 @@ class Capture:
         self.counts[label] -= 1
         self.say(f"undid the last {label} ({self.counts[label]})", ORANGE)
 
-    def save_block(self, label, t0, t1, quiet=False):
-        """Check and save the data around [t0, t1] as one block. Returns the punch Segment or None."""
-        imu, pose = self.sensors.window(t0 - PRE_S, t1 + POST_S)
+    def discard(self):
+        """Throw away everything this session saved (recoverable: punch_sessions.py --restore <session>)."""
+        for path, label in self.saved:
+            folder = os.path.join(self.root, "_deleted", self.session, label)
+            os.makedirs(folder, exist_ok=True)
+            shutil.move(path, os.path.join(folder, os.path.basename(path)))
+            self.counts[label] -= 1
+        n, self.saved = len(self.saved), []
+        self.say(f"discarded this session ({n} recordings). Bring it back with: "
+                 f"python punch_sessions.py --restore {self.session}", ORANGE)
+
+    def save_block(self, label, t0, t1, quiet=False, extra=None, data_end=None):
+        """Check and save the data around [t0, t1] as one block. Returns the punch Segment or None.
+        extra is added to the block's meta (two-arm mode records the combo it came from)."""
+        # data_end: keep data up to here too. A NONE example's time range is just around where the movement
+        # started, but the punch finder needs to see it finish, or it finds nothing in the saved slice.
+        end = max(t1, data_end or t1) + POST_S
+        imu, pose = self.sensors.window(t0 - PRE_S, end)
         settings = self.sensors.settings
-        problem, segment, found = None, None, 0
+        problem, segment, found, gravity = None, None, 0, None
         # At least 60% of the samples the sensor normally sends: its real rate (about 500 Hz for the glove, about
         # 100 Hz for a phone), so a slower sensor is not mistaken for dropped packets.
-        if len(imu["t"]) < 0.6 * self.sensors.sample_rate_hz() * (t1 - t0 + PRE_S + POST_S):
+        if len(imu["t"]) < 0.6 * self.sensors.sample_rate_hz() * (end - t0 + PRE_S):
             problem = "too little glove data arrived (WiFi dropping?)"
         else:
-            segments = punch_segment.find_segments(imu["t"], imu["accel"], imu["gyro"], settings)
+            gravity = self.sensors.gravity_at(imu["t"][0])
+            segments = punch_segment.find_segments(imu["t"], imu["accel"], imu["gyro"], settings, gravity)
             segment, found = punch_segment.pick_block_segment(segments, t0, t1)
             if segment is None:
                 problem = "no punch found"
             elif segment.reason == "gap":
                 problem = "the glove data had a gap during the punch"
-        meta = {"label": label, "arm": self.arm.name, "press_t": t0, "release_t": t1, "session": self.session, "person": self.person,
+        meta = {"label": label, "arm": self.arm.name, "press_t": t0, "release_t": t1, "session": self.session, "person": self.names.name or "",
                 "mode": self.MODE, "segment_settings": settings.to_dict(), "problem": problem,
-                "segments_found": found, "pose_frames": int(len(pose["t"]))}
+                "segments_found": found, "pose_frames": int(len(pose["t"])),
+                "start_gravity": None if gravity is None else [float(v) for v in gravity]}
+        meta.update(extra or {})
         if problem:
             ps.save_block(label, imu, pose, meta, self.root, rejected=True)
             if not quiet:
@@ -173,7 +254,9 @@ class ButtonCapture(Capture):
 
     def finish(self, press_t, release_t):
         label, held = self.label, release_t - press_t
-        if label is None:
+        if self.names.waiting:
+            self.say("NOT SAVED: type your name in the camera window first, then press Enter", RED)
+        elif label is None:
             self.say("all punches are done; type j, h or u to record more", ORANGE)
         elif held < MIN_HOLD_S:
             self.say(f"NOT SAVED: button held only {1000 * held:.0f} ms", RED)
@@ -190,18 +273,21 @@ class ButtonCapture(Capture):
     def on_draw(self, frame):
         h = frame.shape[0]
         top = 150
+        if self.names.waiting:
+            self.names.draw(frame, top)
+            return
         if self.label:
             ps.put(frame, f"{self.label}  {self.counts.get(self.label, 0)}/{self.target}", top, YELLOW, 1.1, thick=3)
             ps.put(frame, f"hold button, punch {self.how[self.label]}, release", top + 32, (255, 255, 255), 0.6)
         else:
             ps.put(frame, "ALL DONE - train with python punch_train.py", top, GREEN, 0.8)
         draw_common(self, frame, top + 58, self.press_t is not None)
-        ps.put(frame, "terminal: j/h/u switch punch, x undo, q quit  |  F11 full screen", h - ps.TEXT_BOTTOM, GREY, 0.45)
+        ps.put(frame, "terminal: j/h/u switch punch, x undo, q quit  |  F11 full screen", h - ps.TEXT_BOTTOM, WHITE, 0.45)
 
 
 class PromptedCapture(Capture):
     MODE = "prompted"
-    HELP = "calibrate with C, then press . to start (. pauses and resumes); terminal: x undo, q quit"
+    HELP = "calibrate with C, then press . to start (. pauses and resumes); terminal: x undo, discard, q quit"
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -221,6 +307,8 @@ class PromptedCapture(Capture):
             super().command(word)
 
     def not_ready_reason(self):
+        if self.names.waiting:
+            return "type your name in the camera window, then press Enter"
         if not self.sensors.glove_ok():
             return "no glove data"
         if not self.sensors.segmenter.ready:
@@ -228,6 +316,20 @@ class PromptedCapture(Capture):
         if not self.calibrated:
             return "press C to calibrate (get into guard during the countdown)"
         return None
+
+    def lost_data(self):
+        """Arms whose sensor has sent nothing for LOST_S: a glove off WiFi, or phyphox stopped or in the background."""
+        return [] if self.sensors.glove_ok(within=LOST_S) else [self.arm.name]
+
+    def pause_if_data_lost(self):
+        """Pause by itself when a sensor stops sending mid-session, so nobody punches into nothing. The combo on
+        screen is cancelled (not counted as missed); "." carries on once the data is back."""
+        if self.paused or self.phase not in ("announce", "rest", "go", "free"):
+            return
+        lost = self.lost_data()
+        if lost:
+            self.toggle()
+            self.say(f"PAUSED: lost {' and '.join(n.upper() for n in lost)} ARM data. Press . once it is back", RED)
 
     def toggle(self):
         """The "." key: start, pause or resume."""
@@ -295,6 +397,7 @@ class PromptedCapture(Capture):
             if keys.period():
                 self.toggle()
             keys.poll_fullscreen()
+        self.pause_if_data_lost()
         # NONE examples only while a session is running: not while waiting, paused or finished
         recording = self.phase in ("announce", "rest", "go", "free") and not self.paused
         while not self.sensors.events.empty():
@@ -316,7 +419,7 @@ class PromptedCapture(Capture):
                          f"{seg.peak_g:.1f} g", GREEN)
         for seg in [s for s in self.none_pending if latest >= s.end_t + POST_S]:
             self.none_pending.remove(seg)
-            if self.save_block(NONE, seg.start_t - 0.05, seg.start_t + 0.05, quiet=True) is not None:
+            if self.save_block(NONE, seg.start_t - 0.05, seg.start_t + 0.05, quiet=True, data_end=seg.end_t) is not None:
                 where = "while moving freely" if any(a <= seg.start_t <= b for a, b in self.free) or self.phase == "free" else "between prompts"
                 print(f"saved NONE {self.counts[NONE]} (a movement {where})")
         return self.quit or self.phase == "done" and not self.pending and not self.none_pending
@@ -324,17 +427,21 @@ class PromptedCapture(Capture):
     def on_draw(self, frame):
         h, now = frame.shape[0], time.time()
         top = 150
+        if self.names.waiting:
+            self.names.draw(frame, top)
+            return
         if self.phase == "waiting" or self.paused:
             reason = self.not_ready_reason()
             title = "PAUSED" if self.paused else "READY TO RECORD"
             ps.put(frame, title, top, ORANGE if self.paused else YELLOW, 1.1, thick=3)
-            ps.put(frame, reason or "press . to " + ("carry on" if self.paused else "start"), top + 32,
-                   ORANGE if reason else (255, 255, 255), 0.7)
+            if reason != "no glove data":  # that one already shows in red below
+                ps.put(frame, reason or "press . to " + ("carry on" if self.paused else "start"), top + 32,
+                       ORANGE if reason else (255, 255, 255), 0.7)
         elif self.phase == "announce":
             ps.put(frame, f"GET IN GUARD - starting in {max(0.0, self.phase_end - now):.0f}", top, YELLOW, 1.0, thick=3)
         elif self.phase == "rest":
-            ps.put(frame, "guard...", top, GREY, 1.1, thick=3)
-            ps.put(frame, f"next: {self.prompt}", top + 32, GREY, 0.6)
+            ps.put(frame, "guard...", top, WHITE, 1.1, thick=3)
+            ps.put(frame, f"next: {self.prompt}", top + 32, WHITE, 0.6)
         elif self.phase == "go":
             ps.put(frame, f"{self.prompt}!", top, GREEN, 2.0, thick=5)
             ps.put(frame, self.how[self.prompt], top + 40, (255, 255, 255), 0.7)
@@ -344,13 +451,300 @@ class PromptedCapture(Capture):
         elif self.phase == "done":
             ps.put(frame, "ALL DONE - train with python punch_train.py", top, GREEN, 0.8)
         draw_common(self, frame, top + 70, False)
-        ps.put(frame, ". start/pause  |  F11 full screen  |  terminal: x undo, q quit", h - ps.TEXT_BOTTOM, GREY, 0.45)
+        ps.put(frame, ". start/pause  |  F11 full screen  |  terminal: x undo, q quit", h - ps.TEXT_BOTTOM, WHITE, 0.45)
+
+
+COMBO_S = 2.4   # two-arm mode: time to throw both punches of a combo, after the beep
+MAX_EXTRA_FREE = 6   # two-arm mode: at most this many MOVE rounds at the end to top up NONE examples (90 s)
+
+
+class ArmRecorder(Capture):
+    """One arm's half of two-arm mode: its own sensor, folder, counts and undo, checked and saved exactly as in
+    one-arm mode, so its recordings train with punch_train.py --arm <name> like any others."""
+    MODE = "prompted_both"
+    HELP = ""
+
+    def __init__(self, owner, *args):
+        super().__init__(*args)
+        self.owner = owner
+        self.names = owner.names  # one name for both arms
+        self.none_pending = []   # this arm's Segments to save as NONE once their data has arrived
+
+    def say(self, text, colour=WHITE):
+        self.owner.say(f"{self.arm.name.upper()}: {text}", colour)
+
+
+def combo_text(combo):
+    return " > ".join(f"{name.upper()} {label}" for name, label in combo)
+
+
+class BothCapture:
+    """Two-arm prompted mode (--both). Each prompt is a combo, one punch per arm, such as "LEFT HOOK > RIGHT UPPERCUT":
+    throw them in that order after the beep. Each punch is labelled and saved by its own arm's recorder, from its own
+    sensor, into that arm's folder, so the two arms still train separately. Half the combos start with the left arm
+    and half with the right, shuffled. Movement outside the prompts is saved as NONE for the arm that moved, which
+    includes the small jolt one arm gets while the other punches."""
+    MODE = "prompted_both"
+    HELP = PromptedCapture.HELP
+
+    def __init__(self, recorders, target, rng=None, person=""):
+        self.recorders = recorders          # {"left": ArmRecorder, "right": ArmRecorder}
+        self.names = NameEntry(person)      # typed in the camera window unless --person was given
+        self.target = target
+        self.rng = rng or random.Random()
+        self.phase, self.phase_end, self.combo = "waiting", None, None
+        self.prompts_done, self.paused, self.calibrated = 0, False, False
+        self.windows = []        # (combo, start, end) of every prompt, to tell punches from NONE
+        self.pending = []        # (combo, start, end) prompts waiting for their data
+        self.free = []           # (start, end) of MOVE, DON'T PUNCH rounds
+        self.firsts = []         # which arm goes first, drawn without putting back: half left, half right
+        self.first_counts = dict.fromkeys(sorted(ps.ARMS), 0)
+        self.order = []          # arm of every block saved this session, newest last, for undo
+        self.extra_free = 0      # MOVE rounds added at the end to collect enough NONE examples
+        self.result, self.result_colour, self.result_t = "", WHITE, 0.0
+        self.quit = False
+
+    # --- terminal, messages and undo ---
+    def say(self, text, colour=WHITE):
+        print(text)
+        self.result, self.result_colour, self.result_t = text, colour, time.time()
+
+    read_terminal = Capture.read_terminal
+
+    def command(self, word):
+        word = word.strip(".")
+        if word == "p":
+            self.toggle()
+        elif word == "x":
+            if self.order:
+                self.recorders[self.order.pop()].undo()
+            else:
+                self.say("nothing to undo")
+        elif word == "discard":
+            for rec in self.recorders.values():
+                rec.discard()
+            self.order, self.quit = [], True
+        elif word in ("q", "quit"):
+            self.quit = True
+        elif word:
+            self.say(self.HELP)
+
+    @property
+    def saved(self):
+        return [item for rec in self.recorders.values() for item in rec.saved]
+
+    # --- start and pause, as in one-arm prompted mode ---
+    def on_calibrated(self):
+        self.calibrated = True
+        if self.phase == "waiting":
+            self.say("calibrated. Press . to start", GREEN)
+
+    def on_key(self, key):
+        return self.names.key(key)
+
+    def lost_data(self):
+        """Arms whose sensor has sent nothing for LOST_S: a glove off WiFi, or phyphox stopped or in the background."""
+        return [name for name, rec in self.recorders.items() if not rec.sensors.glove_ok(within=LOST_S)]
+
+    pause_if_data_lost = PromptedCapture.pause_if_data_lost
+
+    def not_ready_reason(self):
+        if self.names.waiting:
+            return "type your name in the camera window, then press Enter"
+        for name, rec in self.recorders.items():
+            if not rec.sensors.glove_ok():
+                return f"no {name} arm data"
+            if not rec.sensors.segmenter.ready:
+                return f"hold the {name} arm still for a moment"
+        if not self.calibrated:
+            return "press C to calibrate (get into guard during the countdown)"
+        return None
+
+    def toggle(self):
+        now = time.time()
+        if self.phase == "done":
+            return
+        if self.phase == "waiting" or self.paused:
+            reason = self.not_ready_reason()
+            if reason:
+                self.say(f"cannot start yet: {reason}", ORANGE)
+                return
+            self.paused = False
+            self.phase, self.phase_end = "announce", now + ANNOUNCE_S
+            self.say("starting" if not self.prompts_done else "carrying on", GREEN)
+            return
+        if self.phase == "go" and self.pending and self.pending[-1][1] >= now - COMBO_S:  # cancel the showing combo
+            combo, _, _ = self.pending.pop()
+            self.windows.pop()
+            self.prompts_done -= 1
+            self.first_counts[combo[0][0]] -= 1
+            self.firsts.append(combo[0][0])  # its turn to go first is not used up
+        if self.phase == "free":
+            self.free.append((self.free_start, now))
+        self.paused = True
+        self.say("PAUSED - press . to carry on", ORANGE)
+
+    # --- choosing combos ---
+    def still_to_ask(self):
+        """Per arm, how many of each punch are still wanted, not counting prompts waiting for their data."""
+        left = {name: rec.remaining() for name, rec in self.recorders.items()}
+        for combo, _, _ in self.pending:
+            for name, label in combo:
+                left[name][label] -= 1
+        return left
+
+    def next_combo(self):
+        bags = {name: [k for k, n in want.items() for _ in range(n)] for name, want in self.still_to_ask().items()}
+        if not any(bags.values()):
+            return None
+        if not self.firsts:
+            # Enough turns for every combo still needed, exactly half each, shuffled. A missed punch comes up again,
+            # and if that needs more combos the bag is refilled the same way, so the split stays within one.
+            needed = max(len(b) for b in bags.values())
+            names = sorted(self.recorders)
+            self.firsts = [names[i % 2] for i in range(needed + needed % 2)]
+            self.rng.shuffle(self.firsts)
+        first = self.firsts.pop()
+        second = next(name for name in self.recorders if name != first)
+        pick = {name: self.rng.choice(bags[name]) if bags[name] else self.rng.choice(self.recorders[name].arm.labels)
+                for name in self.recorders}  # an arm that is done still punches, so the other can finish
+        return [(first, pick[first]), (second, pick[second])]
+
+    def advance(self, now):
+        if self.phase in ("announce", "go", "free"):
+            if self.phase == "free":
+                self.free.append((self.free_start, now))
+            if self.prompts_done and self.prompts_done % FREE_EVERY == 0 and self.phase == "go":
+                self.phase, self.phase_end, self.free_start = "free", now + FREE_S, now
+                beep("FREE")
+                return
+            self.combo = self.next_combo()
+            if self.combo is None:
+                short = self.none_short()
+                if short and self.extra_free < MAX_EXTRA_FREE:  # punches done, but too few NONE examples
+                    self.extra_free += 1
+                    self.phase, self.phase_end, self.free_start = "free", now + FREE_S, now
+                    self.say(f"punches done; more NONE examples wanted for {' and '.join(short)}", ORANGE)
+                    beep("FREE")
+                    return
+                self.phase = "done"
+                self.say("ALL DONE", GREEN)
+                return
+            self.phase, self.phase_end = "rest", now + REST_S
+        elif self.phase == "rest":
+            self.phase, self.phase_end = "go", now + COMBO_S
+            self.windows.append((self.combo, now, now + COMBO_S))
+            self.pending.append((self.combo, now, now + COMBO_S))
+            self.prompts_done += 1
+            self.first_counts[self.combo[0][0]] += 1
+            beep(self.combo[0][1])
+
+    def in_prompt_window(self, t):
+        return any(start - 0.2 <= t <= end + LATE_S for _, start, end in self.windows)
+
+    def none_short(self):
+        """Arms with fewer NONE examples than the target (NONE examples still being saved count)."""
+        return [name for name, rec in self.recorders.items()
+                if rec.counts.get(NONE, 0) + len(rec.none_pending) < self.target]
+
+    # --- saving ---
+    def data_arrived(self, end):
+        return all((rec.sensors.latest_imu_t() or 0.0) >= end + rec.sensors.settings.timeout_s + POST_S
+                   for rec in self.recorders.values())
+
+    def save_combo(self, combo, start, end):
+        text, segs, saved, missed = combo_text(combo), {}, [], []
+        for position, (name, label) in enumerate(combo, 1):
+            rec = self.recorders[name]
+            seg = rec.save_block(label, start, end, quiet=True, extra={"combo": text, "combo_position": position})
+            if seg is None:
+                missed.append(f"{name.upper()} {label}")
+            else:
+                segs[name] = seg
+                self.order.append(name)
+                saved.append(f"{name.upper()} {label} {rec.counts[label]}/{self.target}")
+        (first, _), (second, _) = combo
+        swapped = first in segs and second in segs and segs[second].start_t < segs[first].start_t - 0.05
+        if missed:
+            self.say(f"MISSED {' and '.join(missed)}: no punch after the beep. It will come up again."
+                     + (f" Saved {', '.join(saved)}." if saved else ""), RED)
+        else:
+            self.say("saved " + " + ".join(saved) + ("  (thrown in the other order; kept)" if swapped else ""),
+                     ORANGE if swapped else GREEN)
+
+    def on_frame(self, keys=None):
+        now = time.time()
+        if keys is not None:
+            if keys.period():
+                self.toggle()
+            keys.poll_fullscreen()
+        self.pause_if_data_lost()
+        recording = self.phase in ("announce", "rest", "go", "free") and not self.paused
+        for rec in self.recorders.values():
+            while not rec.sensors.events.empty():
+                kind, value = rec.sensors.events.get()
+                if kind == "end" and value.reason != "gap" and recording and not self.in_prompt_window(value.start_t):
+                    rec.none_pending.append(value)
+        if not self.paused and self.phase not in ("waiting", "done") and now >= self.phase_end:
+            self.advance(now)
+        for item in [p for p in self.pending if self.data_arrived(p[2])]:
+            self.pending.remove(item)
+            self.save_combo(*item)
+        for name, rec in self.recorders.items():
+            latest = rec.sensors.latest_imu_t() or 0.0
+            for seg in [s for s in rec.none_pending if latest >= s.end_t + POST_S]:
+                rec.none_pending.remove(seg)
+                if rec.save_block(NONE, seg.start_t - 0.05, seg.start_t + 0.05, quiet=True,
+                                  data_end=seg.end_t) is not None:
+                    self.order.append(name)
+                    print(f"saved {name.upper()} NONE {rec.counts[NONE]}")
+        waiting = self.pending or any(rec.none_pending for rec in self.recorders.values())
+        return self.quit or self.phase == "done" and not waiting
+
+    # --- screen ---
+    def on_draw(self, frame):
+        h, now = frame.shape[0], time.time()
+        top = 150
+        if self.names.waiting:
+            self.names.draw(frame, top)
+            return
+        if self.phase == "waiting" or self.paused:
+            reason = self.not_ready_reason()
+            ps.put(frame, "PAUSED" if self.paused else "READY TO RECORD (BOTH ARMS)", top,
+                   ORANGE if self.paused else YELLOW, 1.1, thick=3)
+            ps.put(frame, reason or "press . to " + ("carry on" if self.paused else "start"), top + 32,
+                   ORANGE if reason else (255, 255, 255), 0.7)
+        elif self.phase == "announce":
+            ps.put(frame, f"GET IN GUARD - starting in {max(0.0, self.phase_end - now):.0f}", top, YELLOW, 1.0, thick=3)
+        elif self.phase == "rest":
+            ps.put(frame, "guard...", top, WHITE, 1.1, thick=3)
+            ps.put(frame, f"next: {combo_text(self.combo)}", top + 32, WHITE, 0.6)
+        elif self.phase == "go":
+            for i, (name, label) in enumerate(self.combo):
+                ps.put(frame, f"{i + 1}. {name.upper()} {label}!", top + 50 * i, GREEN if i == 0 else YELLOW, 1.4, thick=4)
+        elif self.phase == "free":
+            ps.put(frame, f"MOVE, DON'T PUNCH  {max(0.0, self.phase_end - now):.0f}", top, ORANGE, 1.1, thick=3)
+            ps.put(frame, "shuffle, adjust your guard, bob, feint", top + 32, (255, 255, 255), 0.6)
+        elif self.phase == "done":
+            ps.put(frame, "ALL DONE - train each arm with punch_train.py --arm left / right", top, GREEN, 0.7)
+        row = top + 110
+        for name, rec in self.recorders.items():
+            totals = "  ".join(f"{k} {rec.counts.get(k, 0)}/{self.target}" for k in rec.arm.labels)
+            ps.put(frame, f"{name.upper():5}  {totals}  NONE {rec.counts.get(NONE, 0)}", row, WHITE, 0.55)
+            row += 24
+        ps.put(frame, "  ".join(f"{name} first: {n}" for name, n in self.first_counts.items()), row, WHITE, 0.5)
+        missing = [name.upper() for name, rec in self.recorders.items() if not rec.sensors.glove_ok()]
+        if missing:
+            ps.put(frame, f"NO {' / '.join(missing)} ARM DATA", row + 30, RED, 0.7)
+        if now - self.result_t < 3:
+            ps.put(frame, self.result[:80], h - ps.TEXT_BOTTOM - 25, self.result_colour, 0.55)
+        ps.put(frame, ". start/pause  |  F11 full screen  |  terminal: x undo, q quit", h - ps.TEXT_BOTTOM, WHITE, 0.45)
 
 
 def draw_common(cap, frame, row, button_held):
     h = frame.shape[0]
     totals = "  ".join(f"{k} {cap.counts.get(k, 0)}/{cap.target}" for k in cap.arm.labels) + f"  NONE {cap.counts.get(NONE, 0)}"
-    ps.put(frame, totals, row, GREY, 0.55)
+    ps.put(frame, totals, row, WHITE, 0.55)
     if not cap.sensors.glove_ok():
         ps.put(frame, "NO GLOVE DATA", row + 30, RED, 0.7)
     elif button_held:
@@ -359,10 +753,70 @@ def draw_common(cap, frame, row, button_held):
         ps.put(frame, cap.result[:75], h - ps.TEXT_BOTTOM - 25, cap.result_colour, 0.55)
 
 
-def main():
+def train_arm(arm, recorded):
+    """One and done: train the arm's model on everything in its folder (NONE included) when a session saved
+    anything. The model it replaces is kept beside it as .bak."""
+    if not recorded:
+        print(f"{arm.name.upper()}: nothing new recorded, so its model is unchanged.")
+        return None
+    import punch_train
+    if os.path.exists(arm.model_path):
+        shutil.copy2(arm.model_path, arm.model_path + ".bak")
+    print()
+    print(f"=== Training the {arm.name} arm (the previous model is kept as {os.path.relpath(arm.model_path)}.bak) ===")
+    return punch_train.main(["--arm", arm.name])
+
+
+def main_both(args):
+    """--both: one camera, both arms' sensors, combo prompts; each arm records into its own folder."""
+    clash = [flag for flag, used in (("--button", args.button), ("--arm", args.arm != "left"), ("--phone", args.phone),
+                                     ("--data", args.data), ("--port", args.port)) if used]
+    if clash:
+        raise SystemExit(f"--both records each arm to its own folder and port, so it can't be used with {', '.join(clash)}."
+                         " For a phone as the right arm, use --right-phone ADDRESS.")
+    config = ps.load_config()
+    recorders = {}
+    cap = BothCapture(recorders, args.target, person=args.person)
+    for name in ("left", "right"):
+        arm = ps.ARMS[name]
+        phone = args.right_phone if name == "right" else None
+        sensors = ps.LiveSensors(config["segment"], simulate=args.simulate, port=arm.port, arm=arm, phone=phone)
+        recorders[name] = ArmRecorder(cap, sensors, config, args.target, arm.data_dir, args.person, arm)
+        source = f"phone at {phone}" if phone else f"glove on port {arm.port}"
+        print(f"{name.upper()} ARM: punches {', '.join(arm.labels)}, {source}, recording to "
+              f"{os.path.relpath(arm.data_dir)} | already have: {recorders[name].counts}")
+    for rec in recorders.values():  # one session name for both arms, so it is listed and deleted as one
+        rec.session = recorders["left"].session
+    print(f"Session {recorders['left'].session}. " + cap.HELP)
+    threading.Thread(target=cap.read_terminal, daemon=True).start()
+    keys = ps.ToolKeys(fullscreen=not args.windowed)
+    started = time.time()
+
+    def on_frame():
+        return cap.on_frame(keys) or bool(args.max_seconds and time.time() - started > args.max_seconds)
+
+    import pose_tracker
+    try:
+        pose_tracker.main(on_frame=on_frame, on_draw=cap.on_draw, on_calibrated=cap.on_calibrated,
+                          camera_index=args.camera, fullscreen=not args.windowed, on_key=cap.on_key,
+                          **ps.shared_pose_callbacks(*[rec.sensors for rec in recorders.values()]))
+    finally:
+        for rec in recorders.values():
+            rec.sensors.close()
+    for name, rec in recorders.items():
+        print(f"{name.upper()}: saved this session {len(rec.saved)} | totals: {rec.counts}")
+    print("first punch of each combo:", cap.first_counts)
+    if not args.no_train:
+        for name, rec in recorders.items():
+            train_arm(ps.ARMS[name], bool(rec.saved))
+    return cap
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--target", type=int, default=100, help="punches wanted of each kind")
-    parser.add_argument("--person", default="", help="who is punching (saved with each block)")
+    parser.add_argument("--person", default="", help="who is punching, saved with each recording so one person's "
+                        "data can be deleted later (punch_sessions.py --person NAME). If left out, it is typed in the camera window")
     parser.add_argument("--button", action="store_true", help="hold the glove button around each punch")
     ps.add_arm_argument(parser)
     ps.add_phone_argument(parser)
@@ -372,7 +826,18 @@ def main():
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--port", type=int, help="UDP port the glove sends to (default: the arm's, 5005 or 5006)")
     parser.add_argument("--max-seconds", type=float, help="stop by itself (for testing)")
-    args = parser.parse_args()
+    parser.add_argument("--no-train", action="store_true",
+                        help="don't train when the session ends (by default each recorded arm is retrained, NONE included)")
+    parser.add_argument("--both", action="store_true",
+                        help="record both arms at once, in combos such as LEFT HOOK > RIGHT UPPERCUT; each arm is still "
+                             "saved to its own folder and trained on its own")
+    parser.add_argument("--right-phone", metavar="ADDRESS",
+                        help="with --both: a phone running phyphox as the right arm's sensor, instead of a glove on port 5006")
+    args = parser.parse_args(argv)
+    if args.both:
+        return main_both(args)
+    if args.right_phone:
+        raise SystemExit("--right-phone is only for --both. For one arm, use --arm right --phone ADDRESS.")
     arm = ps.ARMS[args.arm]
     args.data, args.port = args.data or arm.data_dir, args.port or arm.port
 
@@ -394,10 +859,17 @@ def main():
     import pose_tracker
     try:
         pose_tracker.main(on_frame=on_frame, on_draw=cap.on_draw, on_calibrated=cap.on_calibrated,
-                          camera_index=args.camera, fullscreen=not args.windowed, **sensors.pose_callbacks())
+                          camera_index=args.camera, fullscreen=not args.windowed, on_key=cap.on_key,
+                          **sensors.pose_callbacks())
     finally:
         sensors.close()
     print("Saved this session:", len(cap.saved), "| totals:", cap.counts)
+    if not args.no_train:
+        if args.data == arm.data_dir:
+            train_arm(arm, bool(cap.saved))
+        elif cap.saved:
+            print(f"Recorded to a different folder, so no model was trained. Train it with: "
+                  f"python punch_train.py --arm {arm.name} --data {args.data} --out <model file>")
     return cap
 
 

@@ -1,0 +1,35 @@
+{
+  "game": "Default controls: edit with python controls_editor.py",
+  "normal": {
+    "JAB": {"bind": "j", "hold_ms": 50},
+    "HOOK": {"bind": "h", "hold_ms": 50},
+    "UPPERCUT": {"bind": "u", "hold_ms": 50},
+    "CROSS": {"bind": "k", "hold_ms": 50}
+  },
+  "tracking": {
+    "JAB": {"bind": "mouse_left", "hold_ms": 150},
+    "HOOK": {"bind": "mouse_right", "hold_ms": 150},
+    "UPPERCUT": {"bind": "mouse_middle", "hold_ms": 150}
+  },
+  "defence": {
+    "BLOCK": "w",
+    "DUCK": "s",
+    "SLIP LEFT": "a",
+    "SLIP RIGHT": "d"
+  },
+  "aim": {
+    "mode": "speed",
+    "speed": 1200,
+    "curve": 1.5,
+    "dead_zone": 0.06,
+    "position_gain": 1500,
+    "vertical_scale": 1.0,
+    "invert_y": false,
+    "block_while_tracking": false
+  },
+  "notes": [
+    "normal: punches while the glove button is up. tracking: punches while it is held, when the right hand steers the mouse.",
+    "defence: camera body states, held while they last. BLOCK is off while tracking unless aim.block_while_tracking is true.",
+    "Normal and defence keys are the Browser Boxing ones from browser_boxing.json."
+  ]
+}

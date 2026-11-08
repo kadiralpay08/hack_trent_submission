@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keyboard Warrior | Stop mashing keys. Throw punches.</title>
+  <meta name="description" content="Your webcam turns real punches into game controls. Throw a hook, duck a hit, and play a boxing game with your body.">
+  <meta name="theme-color" content="#0b0d12">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ff3355'/%3E%3Ctext x='32' y='43' font-family='Arial' font-weight='900' font-size='30' text-anchor='middle' fill='white'%3EKW%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="keycap" aria-hidden="true">KW</span>
+      <div><b>KEYBOARD WARRIOR</b><small>Stop mashing keys. Throw punches.</small></div>
+    </div>
+
+    <nav class="tabs" role="tablist" aria-label="What to play">
+      <button role="tab" id="tabSpar" aria-selected="true" aria-controls="stage">Sparring bot</button>
+      <button role="tab" id="tabBB" aria-selected="false" aria-controls="stage">Browser Boxing</button>
+    </nav>
+
+    <div class="chips" aria-label="Status">
+      <span class="chip" id="chipCam">Camera off</span>
+      <span class="chip" id="chipBody">No body</span>
+      <span class="chip" id="chipCal">Not calibrated</span>
+      <span class="chip" id="chipBridge">Bridge off</span>
+    </div>
+
+    <button class="btn small ghost" id="musicBtn" aria-pressed="false" title="The fight beat on or off (N)">Music on</button>
+    <button class="btn small ghost" id="muteBtn" aria-pressed="false" title="All sound on or off (M)">Sound on</button>
+  </header>
+
+  <main class="layout">
+    <section class="stage" id="stage" aria-label="Game">
+      <div class="game-wrap" id="gameWrap"><canvas id="game" aria-label="Boxing game"></canvas></div>
+
+      <div class="bb-pane" id="bbPane" hidden>
+        <div class="bb-card">
+          <h2>Play the real Browser Boxing</h2>
+          <p>Browser Boxing does not allow itself to be shown inside another page, so it opens in its own window, placed right over this area. Your punches reach it through a small program on your laptop that presses the keys.</p>
+          <ol>
+            <li>
+              <b>Start the key bridge.</b> In the project folder, run:
+              <div class="code"><code id="bridgeCmd">python keybridge.py --live</code><button class="btn small" id="copyCmd">Copy</button></div>
+              <span class="status-line" id="bridgeLine">Looking for the bridge…</span>
+            </li>
+            <li><b>Open the game.</b> <button class="btn primary small" id="openGameBtn">Open Browser Boxing here</button>
+              Choose casual play or a bot, never ranked.</li>
+            <li><b>Click inside the game once</b> so it has the keyboard, then start a fight.</li>
+            <li><b>Turn on "Send keys"</b> in the side panel, or press F8 from any window.</li>
+          </ol>
+          <p class="note">Keys start OFF so stray movements never type into another window. They are released when you leave the picture, stop the camera, or close this page.</p>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side" aria-label="Camera and controls">
+      <section class="card cam-card">
+        <div class="cam-frame" id="camFrame">
+          <canvas id="cam" width="640" height="480"></canvas>
+          <video id="video" playsinline muted></video>
+          <div class="cam-placeholder" id="camPlaceholder">
+            <p>Your camera shows here with a skeleton drawn on you, so you can see where you stand and stay in the picture.</p>
+            <button class="btn primary" id="startBtn">Start camera</button>
+            <p class="small">The video stays on your computer. Nothing is uploaded.</p>
+          </div>
+          <div class="countdown" id="countdown" hidden><span>GET IN GUARD</span><b id="countdownNumber"></b></div>
+        </div>
+        <p class="hint" id="hint" role="status" aria-live="polite">Start the camera to begin.</p>
+
+        <div class="gauge" id="gauge" hidden>
+          <div class="gauge-bar"><div class="gauge-zone" id="gaugeZone"></div><div class="gauge-dot" id="gaugeDot"></div></div>
+          <div class="gauge-labels"><span>Facing camera</span><span>45°</span><span>Side-on</span></div>
+        </div>
+
+        <div class="row">
+          <button class="btn primary" id="calBtn" disabled title="Press, then get in your guard (C)">Calibrate</button>
+          <button class="btn ghost" id="stopBtn" hidden>Stop camera</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Get ready</h2>
+        <ol class="steps" id="steps">
+          <li data-step="camera">Allow the camera</li>
+          <li data-step="mode">Pick how you play</li>
+          <li data-step="position">Stand inside the frame</li>
+          <li data-step="calibrate">Calibrate with your hands up</li>
+          <li data-step="fight">Throw a punch</li>
+        </ol>
+      </section>
+
+      <section class="card">
+        <h2>How do you play?</h2>
+        <div class="modes" id="modeList"></div>
+      </section>
+
+      <section class="card">
+        <h2>Live</h2>
+        <div class="states" id="states" aria-live="polite"><span class="pill dim">no moves yet</span></div>
+        <div class="meters">
+          <div><span>Left hand</span><div class="meter"><i id="meterL"></i></div></div>
+          <div><span>Right hand</span><div class="meter"><i id="meterR"></i></div></div>
+        </div>
+        <div class="counts" id="counts"></div>
+        <p class="last" id="lastPunch">Last punch: none yet</p>
+      </section>
+
+      <section class="card" id="keysCard">
+        <h2>Keys for Browser Boxing</h2>
+        <p class="small" id="bridgeText">The key bridge is not running.</p>
+        <label class="switch"><input type="checkbox" id="outputSwitch" disabled><span>Send keys to the game</span></label>
+        <p class="small">With the bridge running, F7 calibrates, F8 turns keys on or off, and F9 stops them. These work from any window.</p>
+      </section>
+
+      <details class="card">
+        <summary>How to move</summary>
+        <table class="moves">
+          <tr><td>Hook</td><td>Swing a hand in toward the middle of your body</td></tr>
+          <tr><td>Uppercut</td><td>Hand low, then drive it up</td></tr>
+          <tr><td>Jab, cross</td><td>A camera in front cannot see these. Use the sparring game's J and K keys, or play with the glove in <code>play.bat</code></td></tr>
+          <tr><td>Block</td><td>Both hands up by your face</td></tr>
+          <tr><td>Duck</td><td>Drop your head</td></tr>
+          <tr><td>Slip</td><td>Lean your head left or right</td></tr>
+        </table>
+        <p class="small">No camera? In the sparring game, J K H U throw punches and W S A D block, duck and slip.</p>
+      </details>
+
+      <details class="card">
+        <summary>Advanced</summary>
+        <label class="field">Camera <select id="cameraSelect"><option value="">Default camera</option></select></label>
+        <label class="field">Lead hand
+          <select id="leadSelect"><option value="L">Left (orthodox)</option><option value="R">Right (southpaw)</option></select>
+        </label>
+        <p class="small" id="engineInfo"></p>
+        <p class="small">Punch settings in use (<span id="settingsSource">none yet</span>):</p>
+        <pre id="settingsDump"></pre>
+      </details>
+    </aside>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -31,7 +31,7 @@ import time
 import punch_segment
 import punch_session as ps
 
-GREEN, BLUE, ORANGE, RED, GREY, YELLOW = (0, 220, 0), (255, 170, 0), (0, 150, 255), (0, 0, 255), (180, 180, 180), (0, 255, 255)
+GREEN, BLUE, ORANGE, RED, WHITE, YELLOW = (0, 220, 0), (255, 170, 0), (0, 150, 255), (0, 0, 255), (255, 255, 255), (0, 255, 255)
 COUNTDOWN_S = 3.0
 GRACE_S = 0.7   # after the time runs out, wait this long so a punch in progress can finish
 COMPARE_TIMEOUTS_MS = (250, 300, 350, 400, 450, 500, 600)
@@ -278,7 +278,7 @@ class Tuner:
             ps.put(frame, f"PUNCH ENDED: {how} after {1000 * self.last.duration:.0f} ms",
                    top, BLUE if self.last.reason == "decel" else ORANGE, 0.8)
         ps.put(frame, f"timeout {1000 * s.timeout_s:.0f} ms | start {s.start_g:g} g | brake {s.decel_g:g} g | punches {self.count}",
-               top + 28, GREY, 0.55)
+               top + 28, WHITE, 0.55)
         if now - self.message_t < 3:
             ps.put(frame, self.message[:75], top + 52, YELLOW, 0.5)
 
@@ -287,6 +287,8 @@ class Tuner:
             state = test["state"]
             if state == "waiting":
                 reason = self.not_ready_reason()
+                if reason == "no glove data":  # already shown in red at the top
+                    reason = "waiting"
                 text, colour = f"TEST {test['what']}: " + (reason if reason else "press . to start"), (ORANGE if reason else YELLOW)
             elif state == "countdown":
                 text, colour = f"TEST {test['what']}: starting in {max(0.0, test['go_wall'] - now):.0f}", YELLOW
@@ -300,12 +302,12 @@ class Tuner:
             ps.put(frame, text, row, colour, 0.75, thick=2)
         elif self.report and now - self.report_t < 30:
             for i, line in enumerate(self.report):
-                ps.put(frame, line[:80], row + 20 * i, YELLOW if line.startswith(("now", "best")) else GREY, 0.45, thick=1)
+                ps.put(frame, line[:80], row + 20 * i, YELLOW if line.startswith(("now", "best")) else WHITE, 0.45, thick=1)
 
         # The trace sits above the bottom strip, where pose_tracker shows calibration messages.
         trace_bottom = h - ps.TEXT_BOTTOM - 22
         ps.put(frame, "terminal: type a timeout in ms + Enter  |  . test start/pause  |  F11 full screen",
-               h - ps.TEXT_BOTTOM, GREY, 0.45, thick=1)
+               h - ps.TEXT_BOTTOM, WHITE, 0.45, thick=1)
         times, values = self.sensors.recent_linear_g(3.0)
         ps.draw_trace(frame, times, values, now_t, 3.0, 12.0, self.marks,
                       origin=(10, trace_bottom - 90), size=(w - 20, 90), threshold_g=s.start_g)

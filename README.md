@@ -5,6 +5,8 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch e
 
 ## Main pipeline: glove and camera with a trained model
 
+Every command and option is listed in [COMMANDS.md](COMMANDS.md). Flash the boards from the terminal with `python flash.py cam` (or `s3`, `cam-check`, `s3-check`).
+
 | Step | Command | What it does |
 |---|---|---|
 | 1. Check the glove | `python glove_check.py`, then `python glove_receiver.py` | Confirms data arrives. The receiver also shows whether the button reads `HELD` |
@@ -13,11 +15,15 @@ A left-hand boxing controller. A motion sensor on the glove and a webcam watch e
 | 4. Train | `python punch_train.py` | Trains the random forest and reports glove-only, camera-only and combined accuracy. Saves `models/punch_rf.joblib` |
 | 5. Play | `python punch_live.py --live` | J jab, H hook, U uppercut, plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit. **[** and **]** lower or raise the confidence cutoff while playing, with no retraining. `--confidence 0.7` and `--start-g 3` set the cutoff and the punch threshold at startup. `--popup` shows the camera as a small always-on-top window in a screen corner (`--popup-corner`, `--popup-size`) that never takes focus from the game and ignores clicks, so quit with F9. A game in exclusive full screen hides it |
 
+**Tracking mode and keybinds.** Hold the glove button (GPIO12 to GND) and your right hand steers the mouse like a joystick, from where it was when you pressed. Up and down move the view up and down; left and right move it left and right. While the button is held, punches use a second set of binds (by default jab = left click, hook = right click, uppercut = middle click, each held 150 ms), and the camera's block is off so a raised steering hand can't trigger it. Duck and slip still work. `python controls_editor.py` opens a keybind window with three sets: normal (button up), tracking (button held) and defence (camera). Click a bind, then press a key or click a mouse button. The window also chooses the steering style: speed (like a thumbstick) or position (like a trackpad), and how fast. Changes save to `mappings/controls.json` at once, and a running `punch_live.py` picks them up within a second. `--no-tracking` ignores the button.
+
 **Two gloves (optional).** Everything above is the left arm, and it is the default. A second glove on UDP port 5006 is the right arm: add `--arm right` to `punch_tune.py`, `punch_capture.py`, `punch_train.py` and `punch_live.py`. The right arm has its own recordings (`punch_data_right/`), model (`models/punch_rf_right.joblib`) and punches (CROSS = K, HOOK = H, UPPERCUT = U; its hook goes right, forward, left). Its camera features are mirrored, so a hook looks the same to both models. `python punch_live_both.py --live` runs both models side by side with one camera, and an arm with no model yet is left off. `glove_check.py --port 5006` checks the right glove. A glove with a magnetometer also gets magnetometer features. This is tested on simulated data only.
 
 The camera tools open full screen. **F11** switches to a window and back, so you can reach the terminal, and `--windowed` starts in a window. Timed sessions never start on their own: calibrate with **C** (a 5-second countdown into guard), then press **.** (full stop, from any window) to start. Press **.** again to pause or resume. This covers the tuner's `test` and the capture session.
 
 To change a setting without opening a tool, run `python punch_settings.py timeout 300` (any value from 100 to 1500 ms), `python punch_settings.py confidence 0.7`, or `python punch_settings.py` to show them all. Retrain after changing the timeout.
+
+On a machine where `python` is not the project's Python, you get `No module named cv2`. Put `.\run.bat` in front instead, for example `.\run.bat punch_capture.py` or `.\run.bat punch_train.py`. It runs the script with the project's `.venv` and needs no activation. For step 5, `.\play.bat` is the same as `punch_live.py` (dry run), and `.\play.bat --live` presses keys.
 
 Every tool except training takes `--simulate`, which uses a fake glove so you can try it without hardware. Run the tests with `python -m unittest discover tests`. The supporting modules are `punch_segment.py` (finds where punches start and end), `punch_features.py` (turns a punch into model inputs), `punch_session.py` (shared buffers, settings and data files) and `punch_sim.py` (fake glove data, for testing only). Shared settings live in `punch_config.json`.
 
@@ -83,7 +89,7 @@ python pose_tracker.py
 
 | Key | Action |
 |---|---|
-| `c` | Calibrate: a 5-second countdown starts, so you can get into guard, then it records your stance. Needed for duck and slip detection |
+| `c` | Calibrate: a 5-second countdown starts, so you can get into guard, then it records your stance. Needed for duck and slip detection. Pressing again during the countdown restarts it. The length is `CALIBRATE_DELAY_S` at the top of the file. |
 | `a` / `d` | Rotate the 3D view |
 | `q` | Quit |
 
@@ -132,6 +138,29 @@ python phone_imu.py --no-tls     # plain http, to test on this computer only
 
 On the phone, open the printed `https://<laptop address>:8443` in Safari or Chrome, accept the certificate warning, tap Start and allow motion access. Keep the page open and the screen on. Windows Firewall (and Norton, if it is on) must allow inbound TCP on port 8443. If the phone lying flat with the screen up reads -1 g on z, run with `--flip-accel`. If rotation looks about 57 times too small, add `--gyro-rad`. Set `AXIS_MAP` and `AXIS_SIGN` for how the phone sits on the hand. Samples use the glove id `R` and the same units as `glove_receiver.py`, and the left glove's pipeline does not see them. Nothing finds or classifies right-hand punches yet.
 
+### `play.py`, `tune_punches.py` and `replay_punches.py` (the variant framework)
+
+An earlier way of trying different product versions: each one is a folder in `variants/` with its own settings and its own recorded tuning sessions, found automatically. **No variant is active now.** The 45 degree camera was one, and it is shelved in `archive/angled_camera/` (its README explains why and how to bring it back). The main path is the glove pipeline above, so `python play.py` currently reports that it found no variants. The framework stays for trying a future version; `variants/README.md` explains how to add one.
+
+`tune_punches.py` records a guided camera-only punching session and `replay_punches.py` scores the camera rules on it with no camera needed. Both work without `--variant` for the front camera alone.
+
+The hotkeys below are shared by `punch_live.py`, `controller.py` and `play.py`:
+
+| Key | Action |
+|---|---|
+| `F7` | Calibrate or recalibrate, from any window. Press it, then get in guard: it counts down 5 seconds, then beeps when it worked. |
+| `F8` | Turn key output on or off. A live run starts off. |
+| `F9` | Quit |
+
+### `keybridge.py` and `website/`
+
+A web page that tracks you with the webcam and plays a built-in sparring game, plus a small local program that turns the page's punches into real key presses for Browser Boxing. See `website/README.md`. Its glove mode is the earlier rule-based one (the glove confirms a camera punch), not the trained model.
+
+```powershell
+.\run.bat keybridge.py            # dry run: serves the site, prints keys, presses nothing
+.\run.bat keybridge.py --live     # really presses keys
+```
+
 ## Firmware
 
 The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the ESP32 board package (core 3.x). Each sketch lists its wiring at the top of the file.
@@ -151,10 +180,40 @@ The Uno sketches use only the built-in `Wire` library. `glove_imu.ino` needs the
 | File | What it does |
 |---|---|
 | `requirements.txt` | Python packages for all three scripts. |
-| `.gitignore` | Keeps `.venv/`, `models/`, `__pycache__/`, `config.h` and local Claude settings out of git. |
+| `play.bat` | Plays with the glove and camera (`punch_live.py`): dry run, or `--live` to press keys. Uses `.venv` without activating it. |
+| `run.bat` | Runs any script with the project's `.venv`, for example `.\run.bat punch_capture.py`. Use it when `python` reports `No module named cv2`. |
+| `overlay.py` | Drawing helpers for the large on-screen text used by the recorder and the calibration countdown. |
+| `archive/` | Work that is set aside but kept. `archive/angled_camera/` is the shelved 45 degree camera. |
+| `keybridge.py`, `website/` | The web page and the local program that presses keys for it (see above). |
+| `.gitignore` | Keeps `.venv/`, the root `models/` folder, `__pycache__/`, `config.h`, recorded data and local Claude settings out of git. |
 | `CLAUDE.md`, `AGENTS.md` | Point coding agents to the Entire guide below. |
 | `.entire/agent-guide.md` | Tells coding agents how to use Entire's Graph and Brain tools in this repo. |
 | `.entire/settings.json` | Turns on Entire and sets where it stores session checkpoints. |
 | `.entire/.gitignore` | Keeps Entire's local logs, metadata and temporary files out of git. |
 | `.claude/settings.json` | Claude Code hooks that connect sessions and edits to Entire. |
 | `.brainignore` | Keeps local Claude settings out of Entire's Brain index. |
+
+## How we use Entire
+
+| Part | How we use it |
+|---|---|
+| Sessions | Entire captures Claude Code sessions only (`entire status` lists that one agent). Kiro is not a supported agent, so Kiro sessions are not captured. At the end of a Kiro session we save what was decided and what is left to do as a Brain memory instead, for example the handoff for `kadir/variants`. |
+| Graph | Agents find code with `entire graph query` instead of searching files. Measurements are below. |
+| Brain | Decisions, gotchas and team rules are saved with `entire brain remember`, and agents read them with `entire brain brief` and `entire brain recall` before they change anything. The memories are shared across the team. |
+| Trails | Not used yet. Changes go in through GitHub pull requests. |
+
+### Graph output size
+
+Each row is one question asked with `entire graph query --repo . --profile full --head --format agent --max-context-bytes 4096`. The last two columns show what an agent would read without Graph: the top-ranked file, or every file Graph points to. Measured on 7 November 2026 with Entire CLI 0.13.1 on commit `a7bc7f9`. File sizes are from the working tree.
+
+| Question | Graph output | Top-ranked file | All files Graph points to |
+|---|---|---|---|
+| Where are punch detection settings loaded for a variant | 3,973 B | `variants/base.py` 4,968 B | 5 files, 56,080 B |
+| How does the glove confirm a camera punch | 4,036 B | `glove_punch.py` 4,309 B | 6 files, 60,961 B |
+| Where are keyboard keys pressed for a punch | 4,068 B | `game_input.py` 9,743 B | 6 files, 56,000 B |
+| How is the body angle measured for the angled camera | 4,137 B | `variants/angled_camera/__init__.py` 8,745 B | 6 files, 74,321 B |
+| Where is the recalibrate hotkey handled | 3,880 B | `glove_check.py` 12,852 B | 5 files, 49,033 B |
+
+A Graph answer is about 4 KB, which is roughly 1,000 tokens at 4 bytes per token (an estimate, not a billed count). For the last question, a plain search for "recalibrat" finds `controller.py` and `pose_tracker.py`, which are 21,470 B to read in full.
+
+These numbers measure output size only. They don't check that the answer is right: for the hotkey question the correct file, `controller.py`, was ranked third. We have not yet compared the tokens an agent uses over a whole task with and without Graph.

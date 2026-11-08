@@ -7,8 +7,15 @@
 
 Punches (glove and camera together, via the model from punch_train.py): JAB = J, HOOK = H, UPPERCUT = U.
 Defence (camera only, as in controller.py): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D.
-Keys come from mappings/browser_boxing.json. Movement the model calls NONE (not a punch), and any punch
-it is unsure about, presses nothing.
+Keys come from mappings/controls.json; change them with python controls_editor.py (saved changes apply
+while this runs). Movement the model calls NONE (not a punch), and any punch it is unsure about,
+presses nothing.
+
+TRACKING MODE: hold the glove button and your RIGHT hand steers the mouse like a joystick, from where
+it was when you pressed. Punches then use the tracking set (default: jab = left click, hook = right
+click, uppercut = middle click), and the camera's BLOCK is off (duck and slip still work). Let go of the
+button to go back to the normal keys. Steering style and speed are in controls_editor.py. --no-tracking
+ignores the button.
 
 Hotkeys work from any window: F7 calibrate (5 s countdown to get into guard; needed for duck and slip), F8 key output
 on or off (with --live it starts OFF), F9 quit.
@@ -35,7 +42,7 @@ import punch_session as ps
 # browser game F5 reloads the page and F6 jumps to the address bar. Browsers and the games ignore [ ].
 VK_LOWER, VK_RAISE = 0xDB, 0xDD  # [ and ]
 
-GREEN, ORANGE, GREY, YELLOW = (0, 220, 0), (0, 150, 255), (190, 190, 190), (0, 255, 255)
+GREEN, ORANGE, WHITE, YELLOW = (0, 220, 0), (0, 150, 255), (255, 255, 255), (0, 255, 255)
 
 
 class LivePlay:
@@ -71,7 +78,7 @@ class LivePlay:
         delay = 1000 * (time.time() - seen_at)
         timing = f"{1000 * seg.duration:.0f} ms punch ({'stopped' if seg.reason == 'decel' else 'timeout'}), +{delay:.0f} ms to decide"
         if label == "NONE":
-            self.show(f"not a punch ({100 * conf:.0f}%): no key", GREY)
+            self.show(f"not a punch ({100 * conf:.0f}%): no key", WHITE)
             self.log(f"{self.name}movement {self.count}: not a punch {100 * conf:.0f}% | {timing}")
             return
         if label is None or conf < self.clf.min_confidence:
@@ -81,7 +88,7 @@ class LivePlay:
         if not self.game.enabled:
             note = "output OFF, press F8"
         elif self.game.punch(label):
-            note = f"key {self.game.mapping.taps[label]}"
+            note = f"{'tracking ' if self.game.tracking else ''}{self.game.key_for(label)}"
         else:
             note = "no key mapped, or key already down"
         self.show(f"{label} {100 * conf:.0f}%  ({note})", GREEN)
@@ -103,9 +110,9 @@ class LivePlay:
         if not self.footer:
             return
         ps.put(frame, f"key output {'ON' if self.game.enabled else 'OFF (F8)'}  |  F7 calibrate  F9 quit  F11 full screen",
-               frame.shape[0] - ps.TEXT_BOTTOM, YELLOW if self.game.enabled else GREY, 0.5)
+               frame.shape[0] - ps.TEXT_BOTTOM, YELLOW if self.game.enabled else WHITE, 0.5)
         ps.put(frame, f"confidence cutoff {100 * self.clf.min_confidence:.0f}%  ([ looser, ] stricter)"
-               f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - ps.TEXT_BOTTOM - 25, GREY, 0.5)
+               f"  |  start {self.sensors.settings.start_g:g} g", frame.shape[0] - ps.TEXT_BOTTOM - 25, WHITE, 0.5)
 
     def on_draw_popup(self, frame):
         """A sparse picture for the corner popup. The border colour says it at a glance: green = keys on,
@@ -116,7 +123,7 @@ class LivePlay:
             colour = (0, 0, 255)
             ps.put(frame, "NO GLOVE DATA", 110, colour, 1.0, thick=3)
         else:
-            colour = GREEN if self.game.enabled else GREY
+            colour = GREEN if self.game.enabled else WHITE
         cv2.rectangle(frame, (0, 0), (w - 1, h - 1), colour, 10)
         if time.time() - self.shown_t < 1.5:
             ps.put(frame, self.shown, 150, self.shown_colour, 0.9, thick=3)
@@ -127,13 +134,45 @@ class LivePlay:
         self.log(f"confidence cutoff now {100 * self.clf.min_confidence:.0f}%")
 
 
+class ControlsWatcher:
+    """Notices when the controls file is saved (by controls_editor.py) and loads it again."""
+
+    def __init__(self, path, every_s=1.0):
+        self.path, self.every_s = path, every_s
+        self.checked, self.mtime = time.time(), self._mtime()
+
+    def _mtime(self):
+        try:
+            return os.path.getmtime(self.path)
+        except OSError:
+            return None
+
+    def poll(self):
+        """A new Mapping if the file changed since the last check, else None."""
+        if time.time() - self.checked < self.every_s:
+            return None
+        self.checked = time.time()
+        mtime = self._mtime()
+        if mtime is None or mtime == self.mtime:
+            return None
+        self.mtime = mtime
+        import game_input
+        try:
+            return game_input.Mapping.load(self.path)
+        except (OSError, ValueError) as e:  # half-written file or a bad key: keep the old controls
+            print(f"controls file not loaded: {e}")
+            return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--live", action="store_true", help="really press keys (default: only print them)")
     ps.add_arm_argument(parser)
     ps.add_phone_argument(parser)
     parser.add_argument("--model", help="trained model (default: the arm's model file)")
-    parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "browser_boxing.json"))
+    parser.add_argument("--mapping", default=os.path.join(ps.ROOT, "mappings", "controls.json"),
+                        help="controls file (edit it with controls_editor.py; saved changes apply live)")
+    parser.add_argument("--no-tracking", action="store_true", help="ignore the glove button: no mouse steering")
     parser.add_argument("--simulate", action="store_true", help="fake glove (no hardware)")
     parser.add_argument("--windowed", action="store_true", help="start in a normal window, not full screen")
     parser.add_argument("--popup", action="store_true", help="show the camera as a small always-on-top window in a "
@@ -175,6 +214,11 @@ def main():
 
     sensors = ps.LiveSensors(clf.segment, simulate=args.simulate, port=args.port, arm=arm, phone=ps.phone_for(args))
     play = LivePlay(sensors, clf, game)
+    tracking = None
+    if not args.no_tracking:
+        import hand_aim
+        tracking = hand_aim.Tracking(sensors, game)
+    watcher = ControlsWatcher(args.mapping)
 
     # Defence keys, calibration and the F7/F8/F9 hotkeys come from controller.py; punches come from the model.
     callbacks = controller.make_callbacks(game, controller.Hotkeys(), detector=False)
@@ -187,7 +231,15 @@ def main():
     started_confidence, started = clf.min_confidence, time.time()
 
     def on_frame():
+        if tracking:
+            tracking.poll()  # before play.poll(), so a punch thrown with the button held uses the tracking set
         play.poll()
+        changed = watcher.poll()
+        if changed:
+            game.set_mapping(changed)
+            if tracking:
+                tracking.set_settings(changed.aim)
+            print("controls reloaded from " + os.path.basename(args.mapping))
         if not popup:
             screen_keys.poll_fullscreen()
         if sensitivity_keys.pressed(VK_LOWER):
@@ -203,19 +255,27 @@ def main():
             popup.update(frame)
         else:
             play.on_draw(frame)
+            if tracking:
+                tracking.draw(frame, ps.put)
 
-    callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=fullscreen)
+    callbacks.update(on_frame=on_frame, on_draw=on_draw, camera_index=args.camera, fullscreen=fullscreen,
+                     state_keys=game.key_for_state)
 
     print(f"Model trained {clf.info['trained_at']} on {clf.info['counts']}, "
           f"cross-validated accuracy {100 * clf.info['cv_accuracy']:.0f}%.")
     print(f"Timeout {1000 * clf.segment.timeout_s:.0f} ms, start {clf.segment.start_g:g} g, "
-          f"confidence cutoff {100 * clf.min_confidence:.0f}% ([ and ] to change). Keys: {mapping.taps}")
+          f"confidence cutoff {100 * clf.min_confidence:.0f}% ([ and ] to change).")
+    print(f"Keys: normal {mapping.taps} | tracking (glove button held) {mapping.tracking_taps} | defence {mapping.holds}")
+    if tracking:
+        print(f"Hold the glove button to steer the mouse with your right hand ({mapping.aim['mode']} style).")
     print("LIVE: keys go to the focused window." if args.live else "Dry run: nothing is pressed.")
     print(f"Key output is {'ON' if game.enabled else 'OFF'}. F7 calibrates, F8 toggles output, F9 quits.")
     import pose_tracker
     try:
         pose_tracker.main(**callbacks)
     finally:
+        if tracking:
+            tracking.close()
         game.close()
         sensors.close()
     if clf.min_confidence != started_confidence:

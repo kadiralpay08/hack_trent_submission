@@ -1,0 +1,9 @@
+{
+  "_note": "Chosen on ONE recorded session at a true 45 degrees (session_20261107_034747): it found 24 of 36 punches with 12 wrong fires; the starting values found 12 with 30 wrong. Treat these numbers as optimistic until a NEW session (tune.bat) scores about as well without changing anything here. straight_max_up and straight_min_travel: a burst from the guard that barely rises and clearly travels is a jab or cross (a hook or uppercut starts low and sweeps up). far_hand_hold: the far hand's landmark jumps when the near arm punches, so a far-hand burst starting within 0.3 s after a near-hand burst is dropped (also drops a real cross thrown straight after a jab). start_speed 4.5: resting jitter in this setup peaks at 1.6, so this is well clear of it. See punch_detector.py for every setting.",
+  "straight_ext": null,
+  "straight_max_up": 0.4,
+  "straight_min_travel": 0.8,
+  "far_hand_hold": 0.3,
+  "start_speed": 4.5,
+  "lead": "L"
+}
