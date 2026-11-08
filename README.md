@@ -3,6 +3,14 @@ Hack Trent Boxing Submission
 
 A left-hand boxing controller. A motion sensor on the glove and a webcam watch each punch, a random forest decides whether it was a jab, hook or uppercut, and the laptop presses that punch's key in a boxing game. The team's plan and decisions are in [PROJECT.md](PROJECT.md).
 
+## Control panel: the easiest way in
+
+```powershell
+python app_server.py        # then open http://127.0.0.1:8770/ (it opens by itself)
+```
+
+One page for the setup guide, camera calibration, recording, training, managing recordings, playing (Street Fighter and others) and choosing each punch's key. It starts the same tools described below, so everything here still works from a terminal. It is built to work with a keyboard, a screen reader, large text and high contrast. Kadir's webcam sparring game moved to `website/sparring.html`.
+
 ## Main pipeline: glove and camera with a trained model
 
 Every command and option is listed in [COMMANDS.md](COMMANDS.md). Flash the boards from the terminal with `python flash.py cam` (or `s3`, `cam-check`, `s3-check`).
@@ -13,7 +21,7 @@ Every command and option is listed in [COMMANDS.md](COMMANDS.md). Flash the boar
 | 2. Pick the timeout | `python punch_tune.py` | Type a timeout in ms in the terminal and watch each punch's start and end on the camera window. `test 10 60 jab` runs a timed test and compares timeouts. Type `save` to keep the settings |
 | 3. Record | `python punch_capture.py --person <name>` | The screen calls JAB, HOOK or UPPERCUT with a beep, in random order. Throw that punch. Records 100 of each, plus NONE (not a punch) examples from movement between prompts. `--target 20` makes a smaller set. `--button` uses the glove button instead. Data stays in `punch_data/` |
 | 4. Train | `python punch_train.py` | Trains the random forest and reports glove-only, camera-only and combined accuracy. Saves `models/punch_rf.joblib` |
-| 5. Play | `python punch_live.py --live` | J jab, H hook, U uppercut, plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit. **[** and **]** lower or raise the confidence cutoff while playing, with no retraining. `--confidence 0.7` and `--start-g 3` set the cutoff and the punch threshold at startup. `--popup` shows the camera as a small always-on-top window in a screen corner (`--popup-corner`, `--popup-size`) that never takes focus from the game and ignores clicks, so quit with F9. A game in exclusive full screen hides it |
+| 5. Play | `python punch_live.py --live` | left arm J jab, K hook, L uppercut and right arm U cross, I hook, O uppercut (six different keys, editable in `controls_editor.py`), plus W/S/A/D defence keys from the camera. F7 calibrate, F8 key output, F9 quit. **[** and **]** lower or raise the confidence cutoff while playing, with no retraining. `--confidence 0.7` and `--start-g 3` set the cutoff and the punch threshold at startup. `--popup` shows the camera as a small always-on-top window in a screen corner (`--popup-corner`, `--popup-size`) that never takes focus from the game and ignores clicks, so quit with F9. A game in exclusive full screen hides it |
 
 **Tracking mode and keybinds.** Hold the glove button (GPIO12 to GND) and your right hand steers the mouse like a joystick, from where it was when you pressed. Up and down move the view up and down; left and right move it left and right. While the button is held, punches use a second set of binds (by default jab = left click, hook = right click, uppercut = middle click, each held 150 ms), and the camera's block is off so a raised steering hand can't trigger it. Duck and slip still work. `python controls_editor.py` opens a keybind window with three sets: normal (button up), tracking (button held) and defence (camera). Click a bind, then press a key or click a mouse button. The window also chooses the steering style: speed (like a thumbstick) or position (like a trackpad), and how fast. Changes save to `mappings/controls.json` at once, and a running `punch_live.py` picks them up within a second. `--no-tracking` ignores the button.
 

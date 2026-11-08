@@ -189,7 +189,9 @@ class SendInputKeyboard(Keyboard):
             raise ctypes.WinError(ctypes.get_last_error())
 
 
-PUNCHES = ("JAB", "HOOK", "UPPERCUT", "CROSS")
+# The left arm's JAB, HOOK and UPPERCUT, and the right arm's CROSS. The right arm's own HOOK and UPPERCUT are
+# "RIGHT HOOK" and "RIGHT UPPERCUT" here (punch_session.Arm.action), so all six punches can have their own keys.
+PUNCHES = ("JAB", "HOOK", "UPPERCUT", "CROSS", "RIGHT HOOK", "RIGHT UPPERCUT")
 DEFENCE = ("BLOCK", "DUCK", "SLIP LEFT", "SLIP RIGHT", "GUARD DOWN")
 # How the right hand steers the mouse while the glove button is held (see hand_aim.py).
 AIM_DEFAULTS = {

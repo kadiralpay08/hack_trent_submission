@@ -32,9 +32,14 @@ Left hand only. Features and data collection depend on these definitions:
 
 | Punch | Motion | Key |
 |---|---|---|
-| Jab | Straight forward | `J` |
-| Left hook | Left, then forward, then right | `H` |
-| Uppercut | Arm moves down, then up | `U` |
+| Jab (left) | Straight forward | `J` |
+| Left hook | Left, then forward, then right | `K` |
+| Uppercut (left) | Arm moves down, then up | `L` |
+| Cross (right) | Straight forward | `U` |
+| Right hook | Right, then forward, then left | `I` |
+| Uppercut (right) | Arm moves down, then up | `O` |
+
+The six punches have six different keys, one for each of a fighting game's three punch and three kick buttons, so each arm's punches can be mapped in the game (the left arm's three, and the right arm's three). The right arm's hook and uppercut are `RIGHT HOOK` and `RIGHT UPPERCUT` in the controls file.
 
 Defence keys: block `W`, duck `S`, slip left `A`, slip right `D`, guard down (both hands dropped) `G`. These are in `mappings/controls.json`, editable with `controls_editor.py`.
 
@@ -69,6 +74,8 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | Camera text is drawn at the window's real size (2026-11-07) | Text drawn on the small camera picture and then stretched to full screen was blurry. `overlay.py` holds it back and draws it after the picture is enlarged. Text is white or coloured with a black outline, never grey, which was hard to read |
 | Recordings from the old sensors were set aside when the C3 gloves arrived (2026-11-08) | The model reads movement in the sensor's own axes, and the glove's tilt in guard, so a different board or mounting looks like different punches: the left model called almost every C3 punch an unsure JAB. Every session recorded with the ESP32-CAM glove or the phone was moved to `_deleted` (bring them back with `punch_sessions.py --restore`), and both arms train on C3 recordings only. Mount each board in the same place and rotation every session |
 | Separate live script, `controller.py` left unchanged | Keeps Kadir's rule-based controller as a demo fallback |
+| A control panel web page that only launches the existing tools (2026-11-08) | `python app_server.py` serves `website/index.html`: setup guide, calibration, recording, training, recordings (delete and restore sessions), play (Street Fighter and others) and key mapping, in one place. It runs the same `punch_*.py` programs a person would type, so nothing about how punches are found or classified changes, and every tool still works from a terminal. One tool runs at a time because the webcam and the glove's port can only be used by one program. Calibration stays in the existing OpenCV window (C, 5 second countdown), because a second program cannot open the webcam. Accessibility and function come first: keyboard use, screen reader labels, large text, high contrast, no colour-only meaning |
+| The panel is local only and starts only a fixed list of tools (2026-11-08) | It can start programs and press keys, so it listens on 127.0.0.1, refuses a foreign Host or Origin, takes only JSON, and checks every option before building a command. Pressing real keys needs the "Press keys for real" tick and a confirmation |
 | A phone can be the right arm's sensor instead of a glove (2026-11-07) | The phyphox app serves the phone's accelerometer and gyroscope and the laptop polls it (`phyphox_imu.py`). It is chosen with `--phone ADDRESS` together with `--arm right` in `punch_capture.py`, `punch_tune.py` and `punch_live.py`, or `--right-phone` in `punch_live_both.py`, and is refused for the left arm so the left glove's recordings and model can't be mixed with it. Polling means nothing has to connect into the laptop: in testing, a phone's connection into the laptop never arrived (from a teammate's hotspot or an iPhone's own), while the laptop reaching the phone worked. The right arm's recordings, model and punches stay as for the right glove. A phone has no magnetometer and reports about 80 to 100 Hz against a glove's 500 Hz. Capture's "enough data" check used to assume 500 Hz and rejected every phone recording as dropped packets (shown as MISSED); it now scales with the sensor's measured rate (`LiveSensors.sample_rate_hz`). A browser-page alternative (`phone_imu.py`) is kept but did not work in that test |
 
 ## Code map
@@ -90,7 +97,10 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | `hand_aim.py` | Tracking mode: right-hand steering of the mouse while the glove button is held |
 | `controls_editor.py` | Keybind window for `mappings/controls.json` |
 | `punch_live_both.py` | The final program: runs the left and right models side by side with one camera, opens the keybind window, and has tracking mode on the left glove's button |
+| `app_server.py` | The control panel's server: `python app_server.py`, then http://127.0.0.1:8770/. Starts and stops the tools above, lists and deletes recording sessions, saves `mappings/controls.json` |
+| `website/index.html`, `website/ui/` | The control panel page (`ui.js`, `ui.css`) and its list of games (`games.json`, where a new game's setup steps go) |
 | `tests/test_punch_pipeline.py` | Run with `python -m unittest discover tests` |
+| `tests/test_app_server.py` | The panel's server: who may ask, what may run, key mapping rules |
 
 **Status (2026-11-07):** all of the above is built and tested on simulated data. The firmware compiles but hasn't been flashed. Nothing has been tested on real punches yet.
 
@@ -100,7 +110,7 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 
 **Shared parts:** `glove_receiver.py`, `pose_tracker.py`, `game_input.py`, `firmware/glove_imu/` (the left glove, ESP32-CAM). `firmware/glove_imu_s3/` is an ESP32-S3 glove for either arm, and `firmware/mpu6050_usb_check/` and `firmware/mpu9250_usb_check/` check whether a sensor is alive over USB.
 
-**Kadir's game and launcher:** `website/` is a webcam sparring game with arcade sound (`website/js/audio.js`: a punch sound per move, a beat, READY and FIGHT!), and `keybridge.py` serves it and turns its punches into real key presses through `game_input.py`. `play.py` and `variants/` select product versions; the 45 degree camera is shelved in `archive/angled_camera/`.
+**Kadir's game and launcher:** `website/sparring.html` (with `website/js/` and `website/css/`; it used to be `index.html`, now the control panel) is a webcam sparring game with arcade sound (`website/js/audio.js`: a punch sound per move, a beat, READY and FIGHT!), and `keybridge.py` serves it and turns its punches into real key presses through `game_input.py`. `play.py` and `variants/` select product versions; the 45 degree camera is shelved in `archive/angled_camera/`.
 
 **Earlier work, kept and not the main path:** `controller.py`, `glove_punch.py`, `punch_detector.py`, `tune_punches.py`, `replay_punches.py` (Kadir's camera-rules controller), `glove_check.py` (still the first thing to run if the glove seems broken), `punch_tracker.py`, `firmware/punch_stream/`, `firmware/sketch_nov6a/` (wired Uno experiments).
 

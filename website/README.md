@@ -10,15 +10,15 @@ A static site (plain HTML, CSS and JavaScript, no build step) that tracks you wi
 .\.venv\Scripts\python.exe keybridge.py --live --glove
 ```
 
-It opens `http://127.0.0.1:8765/`. The built-in sparring game needs no bridge at all, only a webcam. Without a camera, J K H U throw punches and W S A D block, duck and slip.
+It opens `http://127.0.0.1:8765/sparring.html` (the game page; `index.html` is now the product control panel, see `app_server.py`). The built-in sparring game needs no bridge at all, only a webcam. Without a camera, J K H U throw punches and W S A D block, duck and slip.
 
-To serve the site without the bridge: `python -m http.server 8000` inside this folder, then open `http://localhost:8000`. A camera needs `localhost` or HTTPS, so opening `index.html` as a file does not work.
+To serve the site without the bridge: `python -m http.server 8000` inside this folder, then open `http://localhost:8000/sparring.html`. A camera needs `localhost` or HTTPS, so opening `sparring.html` as a file does not work.
 
 ## What is where
 
 | Path | What it does |
 |---|---|
-| `index.html`, `css/style.css` | The page: the stage on the left, the camera and controls on the right. |
+| `sparring.html`, `css/style.css` | The game page: the stage on the left, the camera and controls on the right. |
 | `js/main.js` | Wires everything together: camera loop, calibration, modes, tabs, the panel. |
 | `js/detect.js` | The punch detection, ported from `pose_tracker.py` and `punch_detector.py`. See "Keeping it in step" below. |
 | `js/pose.js` | Camera, the MediaPipe pose model, and the picture with the skeleton drawn on it. |
