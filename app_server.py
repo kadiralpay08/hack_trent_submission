@@ -163,6 +163,8 @@ def tool_live(p):
         cmd.append("--live")
     else:
         title += " (practice: no keys pressed)"
+    if p.get("popup"):
+        cmd.append("--popup")  # a small window in the screen corner, over the game, as well as the page
     _common_window(p, cmd)
     return title, cmd
 
@@ -270,7 +272,13 @@ class Jobs:
         if not self.running():
             return False
         self.stopped_by_user = True
-        self.proc.terminate()
+        if os.name == "nt":
+            # Stop the tool and anything it started (punch_live_both's keybind window). Plain terminate() kills only
+            # the tool, which then never gets to close the windows it opened.
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        else:
+            self.proc.terminate()
         return True
 
     def snapshot(self, since=0):

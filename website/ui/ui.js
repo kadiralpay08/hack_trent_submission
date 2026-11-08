@@ -261,12 +261,11 @@ function jumpLinks(route, items) {
 }
 
 function cameraOptions() {
-  const windowed = h('input', { id: 'windowed', type: 'checkbox' });
+  // The camera picture is shown at the top of this page, so there is no separate window to size.
   const camera = h('input', { id: 'camera', type: 'number', min: '0', max: '9', value: store.get('camera', '0') });
   const node = h('details', {}, h('summary', { text: 'Camera options' }),
-    h('div', { class: 'choice' }, windowed, h('div', {}, h('label', { for: 'windowed', text: 'Use a window instead of full screen' }), h('p', { class: 'help', text: 'Easier to put next to this page.' }))),
     h('div', { class: 'field' }, h('label', { for: 'camera', text: 'Camera number' }), camera, h('p', { class: 'help', text: '0 is the first camera. Try 1 if the wrong camera opens.' })));
-  return { node, values: () => { store.set('camera', camera.value); return { windowed: windowed.checked, camera: camera.value }; } };
+  return { node, values: () => { store.set('camera', camera.value); return { camera: camera.value }; } };
 }
 
 // ---------------------------------------------------------------- PLAY (the front page)
@@ -293,6 +292,7 @@ async function viewPlay(root) {
   const phoneField = h('div', { class: 'field' }, h('label', { for: 'play-phone', text: 'Phone address for the right arm (optional)' }), phone);
   const confidence = h('input', { id: 'confidence', type: 'number', min: '0.05', max: '0.99', step: '0.05', value: store.get('confidence') });
   const press = h('input', { id: 'press', type: 'checkbox' });
+  const popup = h('input', { id: 'popup', type: 'checkbox', checked: store.get('popup', '1') === '1' });
   const startButton = h('button', { type: 'submit', class: 'btn fight' });
   const form = h('form', { class: 'panel', 'aria-label': 'Start the controller' });
 
@@ -435,11 +435,12 @@ async function viewPlay(root) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     store.set('playArm', armNow()); store.set('phone', phone.value); store.set('confidence', confidence.value);
+    store.set('popup', popup.checked ? '1' : '0');
     if (press.checked) {
       const ok = await confirmDialog('Press keys for real?', 'The controller will press real keys in whichever window has focus. After it starts, click on your game window. Stop it any time with the Stop button.', 'Start with keys on');
       if (!ok) return;
     }
-    const started = await runTool({ tool: 'live', arm: armNow(), phone: phone.value.trim(), confidence: confidence.value, live: press.checked, preset: gameNow().preset, ...cam.values() }, press.checked ? 'Click your game window now.' : 'Keys are not being pressed.');
+    const started = await runTool({ tool: 'live', arm: armNow(), phone: phone.value.trim(), confidence: confidence.value, live: press.checked, popup: popup.checked, preset: gameNow().preset, ...cam.values() }, press.checked ? 'Click your game window now.' : 'Keys are not being pressed.');
     result.replaceChildren(started
       ? notice('ok', press.checked ? 'Running with keys on. Click your game window now so it has focus.' : 'Practice started. Nothing is pressed; the output shows what each punch would press.')
       : notice('bad', 'Could not start. A tool may already be running, or a model may be missing: train it first.'));
@@ -452,6 +453,7 @@ async function viewPlay(root) {
     h('fieldset', { class: 'tight' }, h('legend', { text: 'Which arms?' }),
       h('div', { class: 'inline' }, arms.map((a) => h('div', { class: 'choice' }, a.input, h('label', { for: 'play-' + a.value, text: { left: 'Left arm only', right: 'Right arm only', both: 'Both arms' }[a.value] }))))),
     h('div', { class: 'choice' }, press, h('div', {}, h('label', { for: 'press', text: 'Press keys for real' }), h('p', { class: 'help', text: 'Off is a practice round: it only shows what it would press.' }))),
+    h('div', { class: 'choice' }, popup, h('div', {}, h('label', { for: 'popup', text: 'Corner popup over the game' }), h('p', { class: 'help', text: 'A small window in the bottom-right corner shows each punch in big letters while your game fills the screen. It never takes keys from the game. Calibrate with F7 there. The game must be windowed or borderless, not exclusive full screen.' }))),
     h('div', { class: 'actions' }, startButton), result,
     h('details', {}, h('summary', { text: 'More options' }),
       phoneField,

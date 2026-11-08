@@ -224,7 +224,7 @@ def fit_window(name, frame_w, frame_h):
 def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_calibrated=None,
          on_features=None, on_draw=None, builtin_punches=True, camera_index=0, on_pose=None,
          big_window=False, show_3d=True, calibrate_delay=CALIBRATE_DELAY_S, fullscreen=False, state_keys=None,
-         on_key=None):
+         on_key=None, keep_window=False):
     """Run the tracker. Run on its own it only draws; the callbacks let other code react.
 
     on_punch(kind, side, speed): a punch was recognised. kind is JAB, CROSS, HOOK or UPPERCUT.
@@ -255,6 +255,8 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
         shortcuts (c, a, d, q); return True to use it up, so typing text doesn't calibrate or quit.
     state_keys(state): the key a defence state (such as SLIP LEFT) is pressing right now, or None. Slips are
         shown beside the torso, with this key under them.
+    keep_window: when shown in the control panel page (web_view.py), still open the camera window too. The corner
+        popup (popup_window.py, --popup) restyles that window, so it can float over a game while the page also shows it.
     Layout: this function draws its calibration messages in the bottom BOTTOM_RESERVED pixels of the
     camera image; on_draw should keep its own text above that, so nothing covers them.
     """
@@ -274,10 +276,11 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
     yaw = 0.0  # 3D view rotation
     # Started from the control panel (app_server.py): the picture and its keys go to the page, and no window opens.
     web = web_view.from_env()
+    window = not web or keep_window
     if web:
         show_3d, fullscreen = False, False
         print("Showing the camera in the control panel page.")
-    else:
+    if window:
         cv2.namedWindow("Pose", cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # resizable, so it can go full screen
         if fullscreen:
             set_fullscreen(True)
@@ -371,16 +374,18 @@ def main(on_punch=None, on_states=None, on_frame=None, want_calibrate=None, on_c
             hud.countdown(frame, "Get in guard", max(1, math.ceil(calibrate_at - now)))
         if on_draw:
             on_draw(frame)
-        if web:
-            web.show(overlay.finish_layer(frame, *web_view.SIZE))
-        else:
+        if web:  # keep the text for the window too, when there is one (the corner popup)
+            web.show(overlay.finish_layer(frame, *web_view.SIZE, keep=window))
+        if window:
             cv2.imshow("Pose", overlay.finish_layer(frame, *window_size("Pose", frame)))
         if not sized:
             fit_window("Pose", frame.shape[1], frame.shape[0])
             sized = True
         if on_frame and on_frame():
             break
-        key = web.key() if web else cv2.waitKey(1) & 0xFF
+        key = cv2.waitKey(1) & 0xFF if window else 255
+        if web and key == 255:
+            key = web.key()
         if key != 255 and on_key and on_key(key):
             key = 255  # the tool used it (for example typing a name), so it is not a shortcut here
         if key == ord("c") or bool(want_calibrate and want_calibrate()):

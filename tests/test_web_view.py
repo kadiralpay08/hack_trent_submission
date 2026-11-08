@@ -125,6 +125,23 @@ class ThroughThePanel(unittest.TestCase):
             time.sleep(0.05)
         self.assertFalse(app_server.JOBS.snapshot()["camera"])     # gone from the page when the tool ends
 
+    def test_play_can_also_have_the_corner_popup(self):
+        _, cmd = app_server.tool_live({"arm": "both", "popup": True})
+        self.assertIn("--popup", cmd)
+        _, cmd = app_server.tool_live({"arm": "both"})
+        self.assertNotIn("--popup", cmd)
+
+    def test_one_picture_can_be_finished_for_the_page_and_the_popup(self):
+        import overlay
+        frame = np.zeros((480, 640, 3), np.uint8)
+        overlay.begin_layer(frame)
+        overlay.outlined_text(frame, "JAB", 100, 200, 2.0, (0, 255, 0), 4)
+        page = overlay.finish_layer(frame, *web_view.SIZE, keep=True)
+        self.assertFalse(frame.any())                              # the page's copy did not draw on the frame
+        window = overlay.finish_layer(frame, 640, 480)
+        self.assertTrue(page.any() and window.any())               # both have the text
+        self.assertEqual(page.shape[:2], (720, 960))
+
     def test_tools_without_a_camera_are_not_given_a_view(self):
         jobs = app_server.Jobs()
         jobs.start("train", "Not a camera tool", ["-c", "import os; print('env', os.environ.get('BOXING_WEB_VIEW'))"])
