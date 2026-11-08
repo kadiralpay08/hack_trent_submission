@@ -24,7 +24,9 @@ The screen shows "JAB!", "HOOK!" or "UPPERCUT!" with a beep, in random order.
 Throw that punch once, then return to guard. The strongest punch in the next 1.6 s gets that label.
 Anything the punch finder catches while you are NOT being prompted is saved as NONE, a "not a punch"
 example. Every 15 prompts there is a "MOVE, DON'T PUNCH" round: shuffle, adjust your guard, feint,
-bob. These NONE examples teach the model to press nothing for movement that is not a punch.
+bob. These NONE examples teach the model to press nothing for movement that is not a punch. If NONE is still
+short of --target when the punches are done, extra MOVE rounds top it up (at most 6), so a session with the
+punches already recorded collects only NONE. Only a sudden jolt (over --start-g) is caught: make it sharp.
 Your hands stay as they will be in play, so the training punches match the game.
 
 BUTTON MODE (--button). Hold the glove button, throw one punch, release. Collects no NONE examples.
@@ -298,6 +300,11 @@ class PromptedCapture(Capture):
         self.pending = []        # (label, start, end) prompts waiting for their data
         self.free = []           # (start, end) of MOVE, DON'T PUNCH rounds
         self.none_pending = []   # Segments to save as NONE once their data has arrived
+        self.extra_free = 0      # MOVE rounds added at the end to collect enough NONE examples
+
+    def none_short(self):
+        """True while this arm has fewer NONE examples than the target (ones still being saved count)."""
+        return self.counts.get(NONE, 0) + len(self.none_pending) < self.target
 
     def command(self, word):
         word = word.strip(".")  # "." works in every window, so it may also be typed into the terminal
@@ -377,6 +384,13 @@ class PromptedCapture(Capture):
                 return
             self.prompt = self.next_prompt()
             if self.prompt is None:
+                if self.none_short() and self.extra_free < MAX_EXTRA_FREE:  # punches done, too few NONE examples
+                    self.extra_free += 1
+                    self.phase, self.phase_end, self.free_start = "free", now + FREE_S, now
+                    self.say(f"punches done; more NONE examples wanted: feint, snap your guard, shake out the arm",
+                             ORANGE)
+                    beep("FREE")
+                    return
                 self.phase = "done"
                 self.say("ALL DONE. Train with python punch_train.py", GREEN)
                 return
@@ -455,7 +469,7 @@ class PromptedCapture(Capture):
 
 
 COMBO_S = 2.4   # two-arm mode: time to throw both punches of a combo, after the beep
-MAX_EXTRA_FREE = 6   # two-arm mode: at most this many MOVE rounds at the end to top up NONE examples (90 s)
+MAX_EXTRA_FREE = 6   # at most this many MOVE rounds at the end to top up NONE examples (90 s)
 
 
 class ArmRecorder(Capture):

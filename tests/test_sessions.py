@@ -55,6 +55,18 @@ class Sessions(unittest.TestCase):
         c = self.counts()
         self.assertEqual((c["left"]["JAB"], c["right"]["CROSS"]), (0, 0))
 
+    def test_one_arm_only_then_restore(self):
+        before = self.counts()
+        punch_sessions.main(["--delete", "20261107_100000", "--arm", "right", "--yes", "--no-train"])
+        c = self.counts()
+        self.assertEqual((c["left"]["JAB"], c["right"]["CROSS"]), (3, 0))   # the left arm's part stays
+        punch_sessions.main(["--delete", "20261107_100000", "--arm", "left", "--yes", "--no-train"])
+        punch_sessions.main(["--restore", "20261107_100000", "--arm", "right", "--yes", "--no-train"])
+        c = self.counts()
+        self.assertEqual((c["left"]["JAB"], c["right"]["CROSS"]), (0, 3))   # left still deleted, not lost
+        punch_sessions.main(["--restore", "20261107_100000", "--yes", "--no-train"])
+        self.assertEqual(self.counts(), before)
+
     def test_unknown_session_changes_nothing(self):
         before = self.counts()
         with self.assertRaises(SystemExit):

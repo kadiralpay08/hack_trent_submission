@@ -36,7 +36,9 @@ int MPU_SCL_PIN = 3;
 #define GLOVE_UDP_PORT 5005  // left arm. Flash the right-arm board with -DGLOVE_UDP_PORT=5006 (see PORT above)
 #endif
 const uint16_t UDP_PORT = GLOVE_UDP_PORT;
-const wifi_power_t WIFI_TX_POWER = WIFI_POWER_8_5dBm;  // raise if the signal is weak and it does join
+// 8.5 dBm dropped up to 0.7 s of data at a time while boxing (the body blocks the signal); 15 dBm for that.
+// Lower it again if a board won't join WiFi, or resets on weak batteries.
+const wifi_power_t WIFI_TX_POWER = WIFI_POWER_15dBm;
 // ------------------------------------------------------
 
 uint8_t mpuAddr = 0x68;  // 0x69 if AD0 is pulled high; found by scanning at start-up

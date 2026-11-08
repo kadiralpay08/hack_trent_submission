@@ -157,6 +157,28 @@ class LostData(unittest.TestCase):
             cap.toggle()
             self.assertFalse(cap.paused)
 
+    def test_one_arm_mode_tops_up_none_with_move_rounds(self):
+        """Punches already at the target: a one-arm session still collects NONE, as two-arm mode does."""
+        for none_have, rounds in ((0, punch_capture.MAX_EXTRA_FREE), (5, 0)):
+            with tempfile.TemporaryDirectory() as tmp:
+                punch_capture.beep = lambda kind: None
+                sensors = FakeSensors()
+                cap = punch_capture.PromptedCapture(sensors, ps.load_config(), 5, tmp, "test")
+                cap.say = lambda *a, **k: None
+                cap.counts.update({k: 5 for k in cap.arm.labels}, NONE=none_have)
+                cap.on_calibrated()
+                cap.toggle()
+                phases = []
+                for _ in range(100):
+                    cap.phase_end = 0
+                    phases.append(cap.phase)
+                    if cap.on_frame():
+                        break
+                self.assertEqual(cap.phase, "done")
+                self.assertEqual(cap.extra_free, rounds)        # MOVE rounds until NONE is full, or none needed
+                self.assertEqual("free" in phases, rounds > 0)
+                self.assertEqual(cap.prompts_done, 0)           # no punch prompts: they were already done
+
     def test_one_arm_mode_pauses_too(self):
         with tempfile.TemporaryDirectory() as tmp:
             punch_capture.beep = lambda kind: None
