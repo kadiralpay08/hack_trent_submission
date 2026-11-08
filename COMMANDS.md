@@ -18,4 +18,4 @@ Run from the project folder with `py` (or `.venv\Scripts\python.exe`). The phone
 
 All camera tools also take `--windowed` (not full screen), `--camera N` (another webcam), `--simulate` (fake sensors) and `--max-seconds N` (stop by itself).
 
-**Keys:** in the camera window, **C** calibrates (5 s countdown into guard). **.** starts and pauses recording. **F8** turns key output on/off, **F9** quits, **[ ]** lower/raise confidence, **F11** full screen. In the capture terminal: `x` undoes the last punch, `discard` throws away the session, and `q` quits (and trains).
+**Keys:** in the camera window, **C** calibrates (5 s countdown into guard). **.** starts and pauses recording. **F8** turns key output on/off, **F9** quits, **[ ]** lower/raise confidence, **F11** full screen. Capture won't start until every sensor is sending, and pauses by itself if one stops for 1 s. In the capture terminal: `x` undoes the last punch, `discard` throws away the session, and `q` quits (and trains).

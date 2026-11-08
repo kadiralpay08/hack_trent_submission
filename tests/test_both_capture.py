@@ -20,9 +20,10 @@ class FakeSensors:
     def __init__(self):
         self.events, self.settings, self.now_t = queue.Queue(), punch_segment.SegmentSettings(), 100.0
         self.segmenter = type("S", (), {"ready": True})()
+        self.sending = True
 
-    def glove_ok(self):
-        return True
+    def glove_ok(self, within=0.5):
+        return self.sending
 
     def latest_imu_t(self):
         return self.now_t
@@ -128,6 +129,45 @@ class BothArms(unittest.TestCase):
             punch_capture.main(["--both", "--arm", "right"])
         with self.assertRaises(SystemExit):
             punch_capture.main(["--right-phone", "1.2.3.4"])
+
+
+class LostData(unittest.TestCase):
+    def test_a_sensor_going_quiet_pauses_and_cancels_the_combo_on_screen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cap = make_capture(tmp)
+            phone = cap.recorders["right"].sensors
+            phone.sending = False
+            cap.on_calibrated()
+            cap.toggle()
+            self.assertEqual(cap.phase, "waiting")              # won't start without both arms' data
+            phone.sending = True
+            cap.toggle()
+            cap.phase_end = 0
+            cap.on_frame()                                       # announce -> rest
+            cap.phase_end = 0
+            cap.on_frame()                                       # rest -> go: a combo is showing
+            self.assertEqual((cap.prompts_done, len(cap.pending)), (1, 1))
+            phone.sending = False
+            cap.on_frame()
+            self.assertTrue(cap.paused)                          # paused by itself
+            self.assertEqual((cap.prompts_done, len(cap.pending)), (0, 0))  # the showing combo doesn't count
+            cap.toggle()
+            self.assertTrue(cap.paused)                          # "." can't carry on until the data is back
+            phone.sending = True
+            cap.toggle()
+            self.assertFalse(cap.paused)
+
+    def test_one_arm_mode_pauses_too(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            punch_capture.beep = lambda kind: None
+            sensors = FakeSensors()
+            cap = punch_capture.PromptedCapture(sensors, ps.load_config(), 5, tmp, "test")
+            cap.say = lambda *a, **k: None
+            cap.on_calibrated()
+            cap.toggle()
+            sensors.sending = False
+            cap.on_frame()
+            self.assertTrue(cap.paused)
 
 
 class NameInTheCameraWindow(unittest.TestCase):

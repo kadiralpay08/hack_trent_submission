@@ -269,7 +269,7 @@ class FakeSensors:
         self.events, self.settings, self.now_t = queue.Queue(), punch_segment.SegmentSettings(), 100.0
         self.segmenter = type("S", (), {"ready": True})()
 
-    def glove_ok(self):
+    def glove_ok(self, within=0.5):
         return True
 
     def latest_imu_t(self):

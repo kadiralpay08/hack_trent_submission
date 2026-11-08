@@ -181,7 +181,7 @@ class FakeSensors:
     def __init__(self):
         self.button, self.pose = False, None
 
-    def glove_ok(self):
+    def glove_ok(self, within=0.5):
         return True
 
     def latest_pose(self):

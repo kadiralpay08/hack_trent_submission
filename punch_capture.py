@@ -58,6 +58,7 @@ PRE_S, POST_S = 1.0, 0.3       # data kept before and after each block
 MIN_HOLD_S, MAX_HOLD_S = 0.15, 8.0
 REST_S, GO_S, LATE_S = 1.6, 1.6, 0.6   # prompted: guard, punch window, grace after the window
 FREE_EVERY, FREE_S, ANNOUNCE_S = 15, 15.0, 4.0
+LOST_S = 1.0   # a sensor silent this long mid-session pauses recording
 GREEN, RED, ORANGE, WHITE, YELLOW = (0, 220, 0), (0, 0, 255), (0, 150, 255), (255, 255, 255), (0, 255, 255)
 TONES = {"JAB": 880, "CROSS": 880, "HOOK": 660, "UPPERCUT": 520, "FREE": 300}
 
@@ -316,6 +317,20 @@ class PromptedCapture(Capture):
             return "press C to calibrate (get into guard during the countdown)"
         return None
 
+    def lost_data(self):
+        """Arms whose sensor has sent nothing for LOST_S: a glove off WiFi, or phyphox stopped or in the background."""
+        return [] if self.sensors.glove_ok(within=LOST_S) else [self.arm.name]
+
+    def pause_if_data_lost(self):
+        """Pause by itself when a sensor stops sending mid-session, so nobody punches into nothing. The combo on
+        screen is cancelled (not counted as missed); "." carries on once the data is back."""
+        if self.paused or self.phase not in ("announce", "rest", "go", "free"):
+            return
+        lost = self.lost_data()
+        if lost:
+            self.toggle()
+            self.say(f"PAUSED: lost {' and '.join(n.upper() for n in lost)} ARM data. Press . once it is back", RED)
+
     def toggle(self):
         """The "." key: start, pause or resume."""
         now = time.time()
@@ -382,6 +397,7 @@ class PromptedCapture(Capture):
             if keys.period():
                 self.toggle()
             keys.poll_fullscreen()
+        self.pause_if_data_lost()
         # NONE examples only while a session is running: not while waiting, paused or finished
         recording = self.phase in ("announce", "rest", "go", "free") and not self.paused
         while not self.sensors.events.empty():
@@ -526,6 +542,12 @@ class BothCapture:
     def on_key(self, key):
         return self.names.key(key)
 
+    def lost_data(self):
+        """Arms whose sensor has sent nothing for LOST_S: a glove off WiFi, or phyphox stopped or in the background."""
+        return [name for name, rec in self.recorders.items() if not rec.sensors.glove_ok(within=LOST_S)]
+
+    pause_if_data_lost = PromptedCapture.pause_if_data_lost
+
     def not_ready_reason(self):
         if self.names.waiting:
             return "type your name in the camera window, then press Enter"
@@ -656,6 +678,7 @@ class BothCapture:
             if keys.period():
                 self.toggle()
             keys.poll_fullscreen()
+        self.pause_if_data_lost()
         recording = self.phase in ("announce", "rest", "go", "free") and not self.paused
         for rec in self.recorders.values():
             while not rec.sensors.events.empty():
