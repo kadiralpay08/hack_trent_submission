@@ -5,12 +5,14 @@
       "name": "Street Fighter",
       "kind": "Fighting game with six attack buttons",
       "arm": "both",
+      "launch": { "name": "Street Fighter", "search": ["street fighter"] },
       "summary": "Your left arm throws the three punches and your right arm throws the other three. Each gets its own key, so you can bind them to the game's three punch and three kick buttons.",
       "steps": [
-        "Open Street Fighter yourself and go to its controls or key configuration screen. Choose the keyboard.",
+        "First time only: set up the Street Fighter shortcut above, so the button can open the game for you.",
+        "Press Open Street Fighter. When it has loaded, go to its controls or key configuration screen and choose the keyboard.",
         "Bind the six attack buttons to the six keys in the table below. The 'Suggested' column is only one idea; use whatever feels right.",
         "Bind movement to the defence keys if you want to use them. You can change any key on the Controls page first.",
-        "Start practice here with 'Press keys for real' off. Throw each punch and check the output shows the right name.",
+        "Start a practice round here (keys off) and check each punch shows the right name.",
         "When it looks right, tick 'Press keys for real' and start again. Then click once on the game window so it has focus."
       ],
       "suggest": {
@@ -23,14 +25,32 @@
       }
     },
     {
+      "id": "punch-out",
+      "name": "Mike Tyson's Punch-Out!!",
+      "kind": "Browser game on RetroVault",
+      "arm": "both",
+      "link": "https://retrovault.gg/games/mike-tysons-punch-out",
+      "linkLabel": "Open Mike Tyson's Punch-Out!! (new tab)",
+      "preset": "punchout",
+      "summary": "The NES boxing classic, in your browser. Keys are already set up for it: nothing to bind. Your left arm's punches throw X, your right arm's throw Z, and you dodge, duck and guard with your body.",
+      "steps": [
+        "Press Open Mike Tyson's Punch-Out!! below. It opens a new tab on RetroVault. Click Play Now there (F11 makes it full screen).",
+        "Start a practice round here (keys off), then check the key list below matches what the game shows under its controls. The game's page says up, left, right and down without naming the arrow keys, so check those in the game's own control settings.",
+        "Tick 'Press keys for real' and start again. Then click once inside the game so the browser tab has focus. The game must stay the front window while you fight.",
+        "Hands up holds Up, so punches go to the head. Drop both hands for body blows. Slip left or right to dodge, and duck to duck.",
+        "Both uppercuts fire the star uppercut (Enter). It only works when you have a star."
+      ]
+    },
+    {
       "id": "sparring",
-      "name": "Sparring (built-in browser game)",
+      "name": "Sparring (built in)",
       "kind": "Practice game in your browser",
       "arm": "none",
       "link": "sparring.html",
+      "linkLabel": "Open the sparring game (new tab)",
       "summary": "A webcam sparring game that needs nothing else. It uses the camera only, not the gloves or the trained models.",
       "steps": [
-        "Open the sparring game with the link below. It opens in a new tab.",
+        "Open the sparring game with the button above. It opens in a new tab.",
         "Allow the camera when the browser asks. Close any other program using the webcam first, such as a recording or calibration here."
       ]
     },
@@ -39,11 +59,13 @@
       "name": "Another game",
       "kind": "Any game that takes keyboard input",
       "arm": "both",
+      "launch": { "name": "your game", "search": [] },
       "summary": "Use the same six punch keys and the defence keys in any game that lets you rebind its controls.",
       "steps": [
+        "Set up a shortcut to the game above if you want a button that opens it.",
         "Open the game and find its controls screen.",
         "Bind its actions to the keys in the table below, or change the keys on the Controls page to match the game.",
-        "Start practice here first (keys off), then start with keys on and click the game window."
+        "Start a practice round here first (keys off), then start with keys on and click the game window."
       ],
       "suggest": {}
     }
