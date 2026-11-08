@@ -1,0 +1,111 @@
+ok I want to collect more data. lets do different sides separately
+
+---
+
+Can you merge everything to main
+
+---
+
+I'vve just conneted an esp32-c3 with oled to my computer, i have the mpu9050 that also doesnt have the magnometer like the one used on the esp32cam connected with scl to pin 3 and sda to pin 1, i want you to upload a sketch which reads the MPU data in the standard configuration outlined in the project and sends it over the usb point, and checks if the data is actually coming through
+
+---
+
+are you sure youre not making the data up
+
+---
+
+ok it works, now make it go over wifi, use the andrews laptop previously used ssid
+
+---
+
+flash to the esp32 thats plugged in, and then run it as a left arm controller for now
+
+---
+
+is this over wifi or serial?
+
+---
+
+<task-notification>
+<task-id>bbstuezro</task-id>
+<tool-use-id>toolu_016ia1Pt13ej9gFsk3onK85H</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bbstuezro.output</output-file>
+<status>completed</status>
+<summary>Monitor "left-arm controller startup and errors" stream ended</summary>
+<event>no output after 50 s
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+WARNING: Logging before InitGoogle() is written to STDERR
+W0000 00:00:1794116305.968540   27236 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1794116305.981192   27236 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1794116306.976216   33744 landmark_projection_calculator.cc:81] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bmhr2ju1c</task-id>
+<tool-use-id>toolu_01CMhGnGari7FtPmoDqKuKDL</tool-use-id>
+<output-file>C:\Users\Andre\AppData\Local\Temp\claude\5050be2f8147bbbd\26cfe957-1da9-4ab5-a6e5-30a889aeb53e\tasks\bmhr2ju1c.output</output-file>
+<status>completed</status>
+<summary>Background command "Run the left-arm live controller" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+here is the wifi data, run the flash command to the esp32 by doing ipconfig/checking my local ip and flashing it to esp32
+
+---
+
+im running it right now, before you were getting datas connected over the usb port
+
+---
+
+close the useless punch_live
+
+---
+
+it still says no glove data
+
+---
+
+its ip probably changed, i turned it on and off
+
+---
+
+also what ip adress is the esp32-s3 targetting?
+
+---
+
+still reading as no glove data
+
+---
+
+plugged
+
+---
+
+its connected to three NIMH batteries in a pack is that enough?
+
+---
+
+Ok it reads it, i now need another script for the exact same combo of hardware but for another S3, i have two of them.
+
+---
+
+is there a particular orientation the IMU needs to be in when calibrating? sometimes the accuray is above 90% sometimes its barely above 50
+
+---
+
+board is plugged in
+
+---
+
+left one is showing no glove data, did you do sonethin>
+
+---
+
+Works now, we want to retrain, does the current trainer train each arm seperately in one program? if so have it run for 20 of each punch for each arm
+
+---
+
+merge all this to main
