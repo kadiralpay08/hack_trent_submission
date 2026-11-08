@@ -7,7 +7,7 @@ running side by side, with one camera for both.
 
 Left arm (port 5005, models/punch_rf.joblib):        JAB = J, HOOK = H, UPPERCUT = U
 Right arm (port 5006, models/punch_rf_right.joblib): CROSS = K, HOOK = H, UPPERCUT = U
-Defence (camera): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D. Keys from mappings/controls.json (python controls_editor.py).
+Defence (camera): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D, GUARD DOWN = G. Keys from mappings/controls.json (python controls_editor.py).
 If one arm has no trained model yet, the other still plays on its own.
 
 Hotkeys from any window: F8 key output on or off (with --live it starts OFF), F9 quit, [ and ] confidence

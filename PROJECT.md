@@ -36,7 +36,7 @@ Left hand only. Features and data collection depend on these definitions:
 | Left hook | Left, then forward, then right | `H` |
 | Uppercut | Arm moves down, then up | `U` |
 
-Defence keys: block `W`, duck `S`, slip left `A`, slip right `D`. These are in `mappings/browser_boxing.json`.
+Defence keys: block `W`, duck `S`, slip left `A`, slip right `D`, guard down (both hands dropped) `G`. These are in `mappings/controls.json`, editable with `controls_editor.py`.
 
 ## Training data
 

@@ -190,7 +190,7 @@ class SendInputKeyboard(Keyboard):
 
 
 PUNCHES = ("JAB", "HOOK", "UPPERCUT", "CROSS")
-DEFENCE = ("BLOCK", "DUCK", "SLIP LEFT", "SLIP RIGHT")
+DEFENCE = ("BLOCK", "DUCK", "SLIP LEFT", "SLIP RIGHT", "GUARD DOWN")
 # How the right hand steers the mouse while the glove button is held (see hand_aim.py).
 AIM_DEFAULTS = {
     "mode": "speed",          # "speed": like a thumbstick; "position": like a trackpad

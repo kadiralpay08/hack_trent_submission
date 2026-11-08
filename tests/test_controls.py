@@ -107,6 +107,14 @@ class TrackingSet(unittest.TestCase):
         g.set_tracking(False)             # back to normal: the block that is still showing comes back
         self.assertIn("w", g.keyboard.down)
 
+    def test_guard_down_holds_its_key(self):
+        for data in (None, controls_editor.DEFAULTS):   # the shipped controls file and the editor's defaults
+            g = game(data)
+            g.set_states({"GUARD DOWN"})
+            self.assertEqual(g.keyboard.down, {"g"})
+            self.assertEqual(g.key_for_state("GUARD DOWN"), "g")
+            g.set_states(set())                         # guard back up: the key lets go
+            self.assertEqual(g.keyboard.down, set())
     def test_block_while_tracking_option(self):
         data = gi.Mapping.load(os.path.join(ROOT, "mappings", "controls.json")).to_dict()
         data["aim"]["block_while_tracking"] = True

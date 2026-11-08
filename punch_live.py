@@ -6,7 +6,7 @@
   python punch_live.py --live --popup camera as a small always-on-top corner window, so the game stays visible
 
 Punches (glove and camera together, via the model from punch_train.py): JAB = J, HOOK = H, UPPERCUT = U.
-Defence (camera only, as in controller.py): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D.
+Defence (camera only, as in controller.py): BLOCK = W, DUCK = S, SLIP LEFT = A, SLIP RIGHT = D, GUARD DOWN = G.
 Keys come from mappings/controls.json; change them with python controls_editor.py (saved changes apply
 while this runs). Movement the model calls NONE (not a punch), and any punch it is unsure about,
 presses nothing.
