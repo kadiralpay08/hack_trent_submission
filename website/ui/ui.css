@@ -91,9 +91,9 @@ code { font: 0.92em ui-monospace, Consolas, monospace; background: var(--inset);
 .skip:focus { top: 1rem; }
 
 /* header: a pixel street at dusk, with the name on a sign and two boxers on the pavement */
-.site-header { position: relative; z-index: 2; }
-.scene-band { position: relative; min-height: 8.5rem; background: var(--sky-a); overflow: hidden; }
-.scene { position: absolute; inset: 0; background-image: url("art/scene-arcade.svg"); background-repeat: repeat-x; background-position: center bottom; background-size: auto 100%; image-rendering: pixelated; }
+.site-header { position: relative; z-index: 6; }
+.scene-band { position: relative; min-height: 8.5rem; background: var(--sky-a); }
+.scene { position: absolute; inset: 0; overflow: hidden; background-image: url("art/scene-arcade.svg"); background-repeat: repeat-x; background-position: center bottom; background-size: auto 100%; image-rendering: pixelated; }
 :root[data-contrast="light"] .scene { background-image: url("art/scene-light.svg"); }
 :root[data-contrast="high"] .scene { display: none; }
 :root[data-contrast="high"] .scene-band { min-height: 0; border-bottom: 3px solid var(--line); }
@@ -108,6 +108,7 @@ code { font: 0.92em ui-monospace, Consolas, monospace; background: var(--inset);
 .display[open] > summary { border-bottom: 2px solid var(--line); margin: 0; }
 .display-form { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 0.75rem; align-items: center; padding: 0.9rem; margin-top: 0.5rem; border: 2px solid var(--line); border-radius: var(--radius); background: var(--board); box-shadow: 4px 4px 0 var(--shadow); position: absolute; right: 0; z-index: 5; width: 22rem; max-width: calc(100vw - 2rem); }
 
+@media (max-width: 46rem) { .display { position: static; } .display-form { left: 1rem; right: 1rem; width: auto; max-width: none; } }
 /* two little pixel boxers (drawn by ui.js), standing on the street */
 .boxer { position: absolute; bottom: 1.25rem; width: 2.8rem; height: 4.2rem; shape-rendering: crispEdges; }
 .boxer-a { left: calc(50% - 3.6rem); }
