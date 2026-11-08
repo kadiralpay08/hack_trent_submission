@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.13.1",
+  "checkpoint_id": "01M6XRP5G1HBW590CMEQF2E1J5",
+  "session_id": "26cfe957-1da9-4ab5-a6e5-30a889aeb53e",
+  "strategy": "manual-commit",
+  "created_at": "2026-11-08T14:23:38.6506537Z",
+  "branch": "andre/one-keyset",
+  "checkpoints_count": 5,
+  "save_step_count": 6,
+  "files_touched": [
+    "PROJECT.md",
+    "app_server.py",
+    "mappings/presets/punchout.json",
+    "mappings/street_fighter.json",
+    "punch_live.py",
+    "punch_live_both.py",
+    "tests/test_app_server.py",
+    "tests/test_controls.py",
+    "tests/test_game_launcher.py",
+    "website/ui/ui.js"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "a021d6606936",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 64,
+    "cache_creation_tokens": 45923,
+    "cache_read_tokens": 16047957,
+    "output_tokens": 28084,
+    "api_call_count": 32
+  },
+  "redaction": {
+    "replacements": 200,
+    "layers": {
+      "betterleaks": 31,
+      "connection_string": 0,
+      "credential_key": 0,
+      "credential_value": 0,
+      "credentialed_uri": 0,
+      "entropy": 57,
+      "key_context": 112,
+      "provider_token": 0,
+      "shell_stdin": 0
+    }
+  },
+  "session_metrics": {
+    "turn_count": 127
+  }
+}
