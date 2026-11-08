@@ -73,6 +73,7 @@ Record **100 jabs, 100 left hooks and 100 left uppercuts** with `punch_capture.p
 | `punch_capture.py` | Records labelled training blocks using the glove button |
 | `punch_train.py` | Trains and evaluates the random forest |
 | `punch_live.py` | Classifies punches live and presses keys |
+| `punch_sounds.py` | The website's arcade punch sounds, made in Python. `punch_capture.py` plays one to call each punch. A port of `website/js/audio.js`, so change both together. `python punch_sounds.py` plays them |
 | `punch_config.json` | Shared punch-finding settings |
 | `punch_sim.py` | Fake glove data that follows the punch definitions. Used by `--simulate` and the tests. It shows the code runs, not that the model works on real punches |
 | `tests/test_punch_pipeline.py` | Run with `python -m unittest discover tests` |

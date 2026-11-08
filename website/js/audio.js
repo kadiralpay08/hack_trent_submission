@@ -6,6 +6,9 @@
 //   ready / fight         the "READY ... FIGHT!" jingles
 //   warn / dodge / block / hurt / move / combo / tick / result   the rest of the game
 //
+// The punch sounds and the round bell are also made in Python for the training tool (punch_sounds.py).
+// If you change punch(), _throw(), _impact() or roundBell() here, change punch_sounds.py to match.
+//
 // Every effect takes an optional last argument `at`, a time on the audio clock. SoundEngine can also be
 // given any AudioContext, including an OfflineAudioContext, which is how the sounds are checked without
 // speakers.

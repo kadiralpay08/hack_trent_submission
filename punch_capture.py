@@ -7,7 +7,7 @@
 
 PROMPTED MODE (default). Nothing starts until you have calibrated (press C, get into guard during the
 5 s countdown) and pressed "." (works from any window). "." also pauses and resumes at any time.
-The screen shows "JAB!", "HOOK!" or "UPPERCUT!" with a beep, in random order.
+The screen shows "JAB!", "HOOK!" or "UPPERCUT!" with that punch's arcade sound from the game, in random order.
 Throw that punch once, then return to guard. The strongest punch in the next 1.6 s gets that label.
 Anything the punch finder catches while you are NOT being prompted is saved as NONE, a "not a punch"
 example. Every 15 prompts there is a "MOVE, DON'T PUNCH" round: shuffle, adjust your guard, feint,
@@ -54,10 +54,19 @@ TONES = {"JAB": 880, "HOOK": 660, "UPPERCUT": 520, "FREE": 300}
 
 
 def beep(kind):
+    """Call a punch (or the MOVE, DON'T PUNCH round) with the game's arcade sound for it: see punch_sounds.py."""
     if sys.platform != "win32":
         return
+    threading.Thread(target=_play, args=(kind,), daemon=True).start()
+
+
+def _play(kind):
     import winsound
-    threading.Thread(target=winsound.Beep, args=(TONES.get(kind, 700), 120), daemon=True).start()
+    try:
+        import punch_sounds  # imported here, so if it ever fails the tool still starts and still beeps
+        punch_sounds.play(kind)
+    except Exception:  # a sound problem must never stop a recording session: fall back to the plain tone
+        winsound.Beep(TONES.get(kind, 700), 120)
 
 
 class Capture:
