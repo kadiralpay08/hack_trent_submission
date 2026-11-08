@@ -1,7 +1,7 @@
 # hack_trent_submission
 Hack Trent Boxing Submission
 
-A left-hand boxing controller. A motion sensor on the glove and a webcam watch each punch, a random forest decides whether it was a jab, hook or uppercut, and the laptop presses that punch's key in a boxing game. The team's plan and decisions are in [PROJECT.md](PROJECT.md).
+A left-hand boxing controller. A motion sensor on the glove and a webcam watch each punch, a random forest decides whether it was a jab, hook or uppercut, and the laptop presses that punch's key in a boxing game. The team's plan and decisions are in [PROJECT.md](PROJECT.md); how every part works, from the glove's firmware to the key press, is in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Keyboard Warrior: the easiest way in
 
