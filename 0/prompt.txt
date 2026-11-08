@@ -1,0 +1,29 @@
+py punch_capture.py --both --right-phone 172.20.10.1 --target 40 --person andre
+
+---
+
+does it autosave the data?
+
+---
+
+Can you have it prompt for the persons name each time we train so we can just delete their name if their data sucks?
+
+---
+
+whats the command to do the final program, make sure it also brings up the keybinding thing
+
+---
+
+Also update the commands.md so that it has the commands in a table, and only the ones you can run, with each one having the syntax, an explanation of the parameters you can use, and a one setance explanation of what it does, make it around 1 page long MAX, if it can be shorter make it be shorter
+
+---
+
+add the name prompt in the tab that has the camera, not in the terminal
+
+---
+
+py punch_capture.py --both --right-phone 172.20.10.1 --target 50
+
+---
+
+does it check both the imu and pone are giving sensor data before it starts training? also make sure it pauses if the data stream is lost?
